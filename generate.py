@@ -43,7 +43,6 @@ def limpar_roteiro(texto):
     return linhas_limpas if linhas_limpas else [texto.strip()]
 
 def extrair_termo_busca(frase):
-    # Converte termos em português para inglês na busca de fotos do Pexels
     f = frase.lower()
     mapa = {
         'garoto': 'boy child', 'menino': 'kid boy', 'criança': 'happy child',
@@ -129,7 +128,6 @@ def buscar_foto_pexels(query, index):
         raise Exception("Pexels Key ausente ou sem fotos")
     except Exception as e:
         print(f"Usando foto padrão para a cena {index+1}... ({e})")
-        # Foto padrão de fallback
         img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
         r = requests.get(img_fallback, headers=HEADERS_DOWNLOAD, timeout=30)
         with open(nome_foto, "wb") as f:
@@ -137,7 +135,7 @@ def buscar_foto_pexels(query, index):
         return nome_foto
 
 def montar_video(frases_limpas):
-    print("[3/4] Montando imagens e legendas por cena...")
+    print("[3/4] Montando sequência de fotos e legendas...")
     audio = AudioFileClip("narracao.mp3")
     duracao_total = audio.duration
     duracao_por_cena = duracao_total / len(frases_limpas)
@@ -148,18 +146,17 @@ def montar_video(frases_limpas):
     for i, frase in enumerate(frases_limpas):
         tempo_inicio = i * duracao_por_cena
         
-        # 1. Busca foto correspondente à frase
+        # 1. Busca foto da cena
         termo = extrair_termo_busca(frase)
         foto_path = buscar_foto_pexels(termo, i)
         
-        # Clip da Foto de Fundo
+        # Clip da Foto (Duração individual por frase)
         clip_img = (ImageClip(foto_path)
-                    .set_start(tempo_inicio)
                     .set_duration(duracao_por_cena)
                     .resize(newsize=DIMENSOES))
         clips_fundo.append(clip_img)
         
-        # 2. Clip da Legenda Amarela
+        # 2. Clip da Legenda Sincronizada
         legenda_path = f"legenda_{i}.png"
         criar_imagem_legenda(frase, DIMENSOES[0] - 80, legenda_path)
         pos_y = DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250
@@ -170,9 +167,9 @@ def montar_video(frases_limpas):
                     .set_position(('center', pos_y)))
         clips_legendas.append(clip_leg)
 
-    # Junta o fundo trocando as fotos por cena com a narração e as legendas
-    video_base = CompositeVideoClip(clips_fundo).set_audio(audio)
-    video_final = CompositeVideoClip([video_base] + clips_legendas)
+    # Concatena as fotos em sequência temporal contínua
+    fundo_sequencial = concatenate_videoclips(clips_fundo, method="compose").set_audio(audio)
+    video_final = CompositeVideoClip([fundo_sequencial] + clips_legendas)
 
     print("[4/4] Renderizando MP4 final...")
     video_final.write_videofile("resultado.mp4", fps=24, codec="libx264", audio_codec="aac")
