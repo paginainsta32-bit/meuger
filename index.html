@@ -3,65 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gerador de Vídeo Automático</title>
+  <title>Estúdio de Criar Vídeos AI</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 700px; margin: 30px auto; padding: 20px; background: #f4f6f9; }
-    .card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    h2 { margin-top: 0; color: #333; }
-    label { font-weight: bold; margin-top: 15px; display: block; color: #555; }
-    textarea, select, input, button { width: 100%; margin-top: 8px; padding: 12px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-size: 14px; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 750px; margin: 30px auto; padding: 20px; background: #0f172a; color: #f8fafc; }
+    .card { background: #1e293b; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); border: 1px solid #334155; }
+    h2 { margin-top: 0; color: #38bdf8; text-align: center; font-size: 26px; }
+    label { font-weight: 600; margin-top: 18px; display: block; color: #cbd5e1; font-size: 14px; }
+    textarea, select, input, button { width: 100%; margin-top: 8px; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 14px; }
     textarea { resize: vertical; }
-    button { background: #0066ff; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 16px; }
-    button:hover { background: #0052cc; }
-    #status { margin-top: 15px; font-weight: bold; color: #333; }
-    .video-container { margin-top: 25px; display: none; text-align: center; }
-    video { width: 100%; max-height: 450px; border-radius: 8px; background: #000; margin-top: 10px; }
-    .hint { font-size: 12px; color: #666; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    button { background: linear-gradient(135deg, #0284c7, #2563eb); color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 25px; font-size: 16px; transition: 0.2s; padding: 14px; border-radius: 8px; }
+    button:hover { opacity: 0.9; transform: translateY(-1px); }
+    #status { margin-top: 18px; font-weight: 600; text-align: center; color: #38bdf8; }
+    .video-container { margin-top: 30px; display: none; text-align: center; background: #0f172a; padding: 20px; border-radius: 12px; border: 1px solid #334155; }
+    video { width: 100%; max-height: 480px; border-radius: 8px; margin-top: 10px; background: #000; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    .hint { font-size: 12px; color: #94a3b8; margin-top: 4px; }
   </style>
 </head>
 <body>
 
 <div class="card">
-  <h2>🎬 Gerador de Vídeo Automático</h2>
+  <h2>🎬 Estúdio de Vídeos AI</h2>
   
-  <label for="roteiro">Seu Roteiro (Separe cada cena/frase por uma nova linha):</label>
-  <textarea id="roteiro" rows="7" placeholder="Exemplo:&#10;Um garotinho corre alegremente pela floresta.&#10;Ele encontra um riacho com águas cristalinas.&#10;Ele sorri e olha para o céu ensolarado."></textarea>
-  <span class="hint">💡 Cada linha virará uma foto diferente sincronizada com a fala!</span>
+  <label for="roteiro">Roteiro (Separe cada cena por uma nova linha):</label>
+  <textarea id="roteiro" rows="6" placeholder="Um garotinho corre alegremente pela floresta.&#10;Ele encontra um riacho mágico e cristalino.&#10;O menino sorri para o céu ensolarado."></textarea>
+  <span class="hint">💡 Cada linha virará uma cena diferente com a foto no estilo escolhido!</span>
 
-  <label for="formato">Formato do Vídeo:</label>
-  <select id="formato">
-    <option value="9:16">Vertical (TikTok / Reels / Shorts - 9:16)</option>
-    <option value="16:9">Horizontal (YouTube - 16:9)</option>
-  </select>
+  <div class="grid">
+    <div>
+      <label for="estilo">🎨 Estilo Visual:</label>
+      <select id="estilo">
+        <option value="cartoon">Cartoon (Desenho 2D)</option>
+        <option value="anime">Anime (Estilo Japonês)</option>
+        <option value="3d">3D Animation (Pixar Style)</option>
+        <option value="realista" selected>Realista (Fotografia Pexels)</option>
+      </select>
+    </div>
+    
+    <div>
+      <label for="formato">📱 Formato do Vídeo:</label>
+      <select id="formato">
+        <option value="9:16">Vertical (TikTok / Reels - 9:16)</option>
+        <option value="16:9">Horizontal (YouTube - 16:9)</option>
+      </select>
+    </div>
+  </div>
 
-  <label for="token">Seu GitHub Personal Access Token (PAT):</label>
-  <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxx">
+  <div class="grid">
+    <div>
+      <label for="efeito">✨ Efeitos & Edição (CapCut Style):</label>
+      <select id="efeito">
+        <option value="zoom">Zoom Suave (Ken Burns)</option>
+        <option value="vivido">Filtro Cores Vivas</option>
+        <option value="vintage">Filtro Vintage / Retro</option>
+        <option value="nenhum">Sem Efeitos</option>
+      </select>
+    </div>
 
-  <button onclick="dispararGeracao()">🚀 Gerar Vídeo Agora</button>
+    <div>
+      <label for="token">🔑 GitHub Token (PAT):</label>
+      <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxx">
+    </div>
+  </div>
+
+  <button onclick="dispararGeracao()">🚀 Gerar e Editar Vídeo</button>
 
   <div id="status"></div>
 
   <!-- Player de Vídeo Embutido -->
   <div id="videoContainer" class="video-container">
-    <h3>📺 Seu Vídeo Gerado:</h3>
-    <video id="player" controls></video>
+    <h3>🎥 Pré-visualização do Vídeo Final</h3>
+    <video id="player" controls autoplay></video>
+    <br>
+    <a id="btnDownload" href="#" download="video_pronto.mp4" style="display:inline-block; margin-top:15px; padding:10px 20px; background:#22c55e; color:#fff; text-decoration:none; border-radius:6px; font-weight:bold;">⬇️ Baixar Vídeo MP4</a>
   </div>
 </div>
 
 <script>
   async function dispararGeracao() {
     const roteiro = document.getElementById('roteiro').value.trim();
+    const estilo = document.getElementById('estilo').value;
     const formato = document.getElementById('formato').value;
+    const efeito = document.getElementById('efeito').value;
     const token = document.getElementById('token').value.trim();
     const status = document.getElementById('status');
     const container = document.getElementById('videoContainer');
 
     if(!roteiro || !token) { 
-      alert('Por favor, preencha o roteiro e o seu Token do GitHub!'); 
+      alert('Por favor, preencha o roteiro e insira o seu Token do GitHub!'); 
       return; 
     }
 
-    status.innerHTML = "⏳ Enviando roteiro e iniciando renderização...";
+    status.innerHTML = "⏳ Enviando comando e gerando cenas...";
     container.style.display = "none";
 
     try {
@@ -74,33 +107,36 @@
         },
         body: JSON.stringify({
           event_type: 'gerar_video',
-          client_payload: { roteiro: roteiro, formato: formato }
+          client_payload: { 
+            roteiro: roteiro, 
+            estilo: estilo, 
+            formato: formato,
+            efeito: efeito 
+          }
         })
       });
 
       if(response.ok) {
-        status.innerHTML = "✅ Renderização em andamento no GitHub! Aguarde cerca de 1 a 2 minutos para assistir o vídeo aqui.";
-        iniciarVerificacaoArtefato(token);
+        status.innerHTML = "⚙️ Processando vídeo no GitHub Actions... Aguarde cerca de 1 min.";
+        iniciarVerificacao(token);
       } else {
-        status.innerHTML = "❌ Erro ao disparar. Verifique se o Token está correto e com acesso 'repo'.";
+        status.innerHTML = "❌ Erro de permissão. Verifique seu Token.";
       }
     } catch (e) {
-      status.innerHTML = "❌ Erro na conexão: " + e.message;
+      status.innerHTML = "❌ Erro de conexão: " + e.message;
     }
   }
 
-  // Verifica periodicamente se a renderização no GitHub terminou para exibir o vídeo na tela
-  async function iniciarVerificacaoArtefato(token) {
+  async function iniciarVerificacao(token) {
     const status = document.getElementById('status');
     const player = document.getElementById('player');
     const container = document.getElementById('videoContainer');
+    const btnDownload = document.getElementById('btnDownload');
 
     let tentativas = 0;
-    const maxTentativas = 30; // 2.5 minutos de checagem
-
     const interval = setInterval(async () => {
       tentativas++;
-      status.innerHTML = `⏳ Processando vídeo... (${tentativas * 5}s)`;
+      status.innerHTML = `⏳ Renderizando efeitos e áudio... (${tentativas * 5}s)`;
 
       try {
         const res = await fetch('https://api.github.com/repos/paginainsta32-bit/meuger/actions/runs?per_page=1', {
@@ -113,17 +149,15 @@
           if (run.status === 'completed') {
             clearInterval(interval);
             if (run.conclusion === 'success') {
-              status.innerHTML = "🎉 Vídeo concluído com sucesso!";
-              // Busca o link do artefato
-              const artRes = await fetch(run.artifacts_url, {
-                headers: { 'Authorization': `token ${token}` }
-              });
-              const artData = await artRes.json();
-              if (artData.artifacts && artData.artifacts.length > 0) {
-                status.innerHTML = "🎉 Vídeo pronto! Clique no botão abaixo para baixar ou veja no GitHub.";
-              }
+              status.innerHTML = "🎉 Vídeo gerado com sucesso!";
+              
+              // Carrega o vídeo gerado direto do GitHub Pages / Artefato
+              const videoUrl = `https://raw.githubusercontent.com/paginainsta32-bit/meuger/main/resultado.mp4?t=${new Date().getTime()}`;
+              player.src = videoUrl;
+              btnDownload.href = videoUrl;
+              container.style.display = "block";
             } else {
-              status.innerHTML = "❌ A renderização falhou no GitHub. Verifique os logs na aba Actions.";
+              status.innerHTML = "❌ Erro na renderização. Verifique os logs no GitHub Actions.";
             }
           }
         }
@@ -131,9 +165,9 @@
         console.error(err);
       }
 
-      if (tentativas >= maxTentativas) {
+      if (tentativas >= 35) {
         clearInterval(interval);
-        status.innerHTML = "⏱️ Tempo limite atingido. Verifique o resultado direto no GitHub Actions.";
+        status.innerHTML = "⚠️ O tempo de espera expirou. Atualize a página ou confira na aba Actions.";
       }
     }, 5000);
   }
