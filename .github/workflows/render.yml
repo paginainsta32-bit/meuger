@@ -30,8 +30,15 @@ jobs:
           PEXELS_KEY: ${{ secrets.PEXELS_API_KEY }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY" "${{ github.event.client_payload.estilo }}" "${{ github.event.client_payload.efeito }}" "$CF_ACCOUNT_ID" "$CF_API_TOKEN"
+
+      - name: Publicar Vídeo no Repositório (para o Player do Site)
         run: |
-          python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY" "${{ github.event.client_payload.estilo }}" "${{ github.event.client_payload.efeito }}" "$CF_ACCOUNT_ID" "$CF_API_TOKEN"
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add resultado.mp4
+          git commit -m "update: novo vídeo gerado" || exit 0
+          git push
 
       - name: Salvar Vídeo como Artefato
         uses: actions/upload-artifact@v4
