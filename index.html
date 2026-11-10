@@ -1,0 +1,63 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Gerador de Vídeos Automático</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
+    textarea, select, input, button { width: 100%; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
+    button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>Meu Gerador de Vídeo</h2>
+  
+  <label>Seu Roteiro:</label>
+  <textarea id="roteiro" rows="6" placeholder="Cole seu texto aqui..."></textarea>
+  
+  <label>Formato:</label>
+  <select id="formato">
+    <option value="9:16">Vertical (TikTok / Reels / Shorts - 9:16)</option>
+    <option value="16:9">Horizontal (YouTube - 16:9)</option>
+  </select>
+
+  <label>Seu GitHub Personal Access Token (PAT):</label>
+  <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxx">
+
+  <button onclick="dispararGeracao()">Gerar Vídeo Agora</button>
+
+  <p id="status"></p>
+
+  <script>
+    async function dispararGeracao() {
+      const roteiro = document.getElementById('roteiro').value;
+      const formato = document.getElementById('formato').value;
+      const token = document.getElementById('token').value;
+      const status = document.getElementById('status');
+
+      if(!roteiro || !token) { alert('Preencha o roteiro e seu token do GitHub!'); return; }
+
+      status.innerText = "Enviando comando para o GitHub...";
+
+      // Substitua SEU_USUARIO e SEU_REPOSITORIO pelos seus dados
+      const response = await fetch('https://api.github.com/repos/SEU_USUARIO/SEU_REPOSITORIO/dispatches', {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        body: JSON.stringify({
+          event_type: 'gerar_video',
+          client_payload: { roteiro: roteiro, formato: formato }
+        })
+      });
+
+      if(response.ok) {
+        status.innerText = "🚀 Renderização iniciada! Veja na aba Actions do seu GitHub.";
+      } else {
+        status.innerText = "❌ Erro ao disparar acionamento. Verifique o Token.";
+      }
+    }
+  </script>
+</body>
+</html>
