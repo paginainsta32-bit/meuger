@@ -39,8 +39,8 @@
 
       status.innerText = "Enviando comando para o GitHub...";
 
-      // Substitua SEU_USUARIO e SEU_REPOSITORIO pelos seus dados
-      const response = await fetch('https://api.github.com/repos/SEU_USUARIO/SEU_REPOSITORIO/dispatches', {
+    // Substitua a linha antiga por esta:
+const response = await fetch('https://api.github.com/repos/paginainsta32-bit/meuger/dispatches', {
         method: 'POST',
         headers: {
           'Authorization': `token ${token}`,
