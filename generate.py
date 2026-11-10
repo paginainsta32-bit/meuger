@@ -19,12 +19,14 @@ except ImportError:
     from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
     from moviepy.video.compositing.concatenate import concatenate_videoclips
 
-# 1. Dados recebidos do site
+# 1. Dados recebidos
 ROTEIRO_BRUTO = sys.argv[1] if len(sys.argv) > 1 else "Um garotinho corre pela floresta."
 FORMATO = sys.argv[2] if len(sys.argv) > 2 else "9:16"
 PEXELS_API_KEY = sys.argv[3] if len(sys.argv) > 3 else ""
 ESTILO = sys.argv[4] if len(sys.argv) > 4 else "realista"
 EFEITO = sys.argv[5] if len(sys.argv) > 5 else "zoom"
+CF_ACCOUNT_ID = sys.argv[6] if len(sys.argv) > 6 else ""
+CF_API_TOKEN = sys.argv[7] if len(sys.argv) > 7 else ""
 
 VOZ = "pt-BR-AntonioNeural"
 DIMENSOES = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
@@ -45,39 +47,65 @@ def limpar_roteiro(texto):
             frases_limpas.append(item)
     return frases_limpas if frases_limpas else [texto.strip()]
 
-def extrair_termo_busca(frase):
+def construir_prompt_flux(frase):
+    # Tradutor básico de termos em PT para EN para o FLUX.1 entender melhor
     f = frase.lower()
     mapa = {
-        'garoto': 'boy child', 'menino': 'kid boy', 'criança': 'happy child',
-        'floresta': 'forest trees', 'riacho': 'river stream', 'rio': 'river nature',
-        'cidade': 'city street', 'carro': 'car drive', 'praia': 'beach sea',
-        'tecnologia': 'technology', 'futuro': 'future neon', 'dinheiro': 'money cash',
-        'noite': 'night dark', 'sol': 'sunlight nature', 'festa': 'party celebration'
+        'garoto': 'a young boy', 'menino': 'a young boy', 'criança': 'a happy child',
+        'floresta': 'dense green forest', 'riacho': 'sparkling river stream', 'rio': 'beautiful river',
+        'cidade': 'modern city street', 'carro': 'fast sport car', 'praia': 'sunny tropical beach',
+        'tecnologia': 'futuristic technology', 'futuro': 'cyberpunk city neon lights', 'dinheiro': 'stacks of cash money',
+        'noite': 'mysterious night sky with stars', 'sol': 'bright sunlight and warm day', 'festa': 'vibrant party celebration'
     }
     
-    termo_base = "nature background"
+    sujeito = "scenery"
     for key, val in mapa.items():
         if key in f:
-            termo_base = val
+            sujeito = val
             break
             
-    # Adiciona a palavra do estilo visual escolhido à busca
-    if ESTILO == "cartoon":
-        return f"{termo_base} cartoon illustration"
-    elif ESTILO == "anime":
-        return f"{termo_base} anime style"
-    elif ESTILO == "3d":
-        return f"{termo_base} 3d render animation"
-    else:
-        return termo_base
+    # Ajusta o sufixo do prompt de acordo com o estilo visual escolhido
+    sufixos = {
+        "cartoon": "cartoon 2d style, vibrant colors, disney pixel art, highly detailed",
+        "anime": "anime style, makoto shinkai aesthetics, studio ghibli, 8k resolution",
+        "3d": "3d render, pixar style, unreal engine 5, octane render, cute and detailed",
+        "realista": "hyperrealistic photography, 8k, cinematic lighting, sharp focus, professional photo"
+    }
+    
+    sufixo = sufixos.get(ESTILO, sufixos["realista"])
+    prompt_final = f"{sujeito}, {frase}, {sufixo}"
+    return prompt_final
 
 async def gerar_audio(texto_completo):
     print("[1/4] Gerando narração...")
     communicate = edge_tts.Communicate(texto_completo, VOZ)
     await communicate.save("narracao.mp3")
 
+def gerador_imagem_flux(prompt, nome_saida):
+    print(f"🎨 Gerando imagem IA (FLUX-1-Schnell) para: '{prompt[:60]}...'")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
+    headers = {
+        "Authorization": f"Bearer {CF_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "prompt": prompt,
+        "num_steps": 4  # O FLUX.1 schnell é super rápido com 4 passos
+    }
+    
+    response = requests.post(url, headers=headers, json=payload, timeout=40)
+    if response.status_code == 200:
+        res_json = response.json()
+        if res_json.get("success") and "result" in res_json and "image" in res_json["result"]:
+            import base64
+            image_bytes = base64.b64decode(res_json["result"]["image"])
+            with open(nome_saida, "wb") as f:
+                f.write(image_bytes)
+            print("✅ Imagem IA gerada com sucesso via Cloudflare!")
+            return nome_saida
+    raise Exception(f"Falha na API da Cloudflare: {response.text}")
+
 def aplicar_efeito_filtro(caminho_imagem):
-    # Aplica os filtros estilo CapCut na imagem
     img = Image.open(caminho_imagem)
     if EFEITO == "vivido":
         enhancer = ImageEnhance.Color(img)
@@ -121,35 +149,42 @@ def criar_imagem_legenda(texto, largura_max, caminho_saida):
     img.save(caminho_saida)
     return caminho_saida
 
-def buscar_foto_pexels(query, index):
-    orientacao = 'portrait' if FORMATO == "9:16" else 'landscape'
-    url = f"https://api.pexels.com/v1/search?query={query}&per_page=5&orientation={orientacao}"
-    headers_api = {"Authorization": PEXELS_API_KEY, **HEADERS_DOWNLOAD} if PEXELS_API_KEY else HEADERS_DOWNLOAD
+def obter_imagem_cena(frase, index):
     nome_foto = f"foto_{index}.jpg"
+    prompt = construir_prompt_flux(frase)
 
+    # 1. Tenta gerar via FLUX.1 (Cloudflare Workers AI)
+    if CF_ACCOUNT_ID and CF_API_TOKEN:
+        try:
+            gerador_imagem_flux(prompt, nome_foto)
+            aplicar_efeito_filtro(nome_foto)
+            return nome_foto
+        except Exception as e:
+            print(f"⚠️ Erro no FLUX.1: {e}. Usando fallback Pexels/Padrão...")
+
+    # 2. Fallback Pexels caso a Cloudflare não esteja configurada
     try:
-        if PEXELS_API_KEY:
-            res = requests.get(url, headers=headers_api, timeout=15)
-            if res.status_code == 200:
-                data = res.json()
-                if data.get('photos') and len(data['photos']) > 0:
-                    img_url = data['photos'][0]['src']['large2x']
-                    r = requests.get(img_url, headers=HEADERS_DOWNLOAD, timeout=30)
-                    with open(nome_foto, "wb") as f:
-                        f.write(r.content)
-                    aplicar_efeito_filtro(nome_foto)
-                    return nome_foto
-        raise Exception("Uso de imagem padrão")
-    except Exception as e:
-        img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
-        r = requests.get(img_fallback, headers=HEADERS_DOWNLOAD, timeout=30)
-        with open(nome_foto, "wb") as f:
-            f.write(r.content)
-        aplicar_efeito_filtro(nome_foto)
-        return nome_foto
+        url = f"https://api.pexels.com/v1/search?query={prompt}&per_page=1"
+        headers = {"Authorization": PEXELS_API_KEY} if PEXELS_API_KEY else {}
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200 and res.json().get('photos'):
+            img_url = res.json()['photos'][0]['src']['large2x']
+            r = requests.get(img_url, timeout=20)
+            with open(nome_foto, "wb") as f: f.write(r.content)
+            aplicar_efeito_filtro(nome_foto)
+            return nome_foto
+    except:
+        pass
+
+    # 3. Imagem de reserva final
+    img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
+    r = requests.get(img_fallback, timeout=20)
+    with open(nome_foto, "wb") as f: f.write(r.content)
+    aplicar_efeito_filtro(nome_foto)
+    return nome_foto
 
 def montar_video(frases_limpas):
-    print("[3/4] Montando imagens, animações e efeitos...")
+    print("[3/4] Montando imagens IA e efeitos...")
     audio = AudioFileClip("narracao.mp3")
     duracao_total = audio.duration
     duracao_por_cena = duracao_total / len(frases_limpas)
@@ -159,21 +194,17 @@ def montar_video(frases_limpas):
 
     for i, frase in enumerate(frases_limpas):
         tempo_inicio = i * duracao_por_cena
-        termo = extrair_termo_busca(frase)
-        foto_path = buscar_foto_pexels(termo, i)
+        foto_path = obter_imagem_cena(frase, i)
         
-        # Clip da imagem base
         clip_img = (ImageClip(foto_path)
                     .set_duration(duracao_por_cena)
                     .resize(newsize=DIMENSOES))
         
-        # Efeito Ken Burns (Zoom Suave estilo CapCut)
         if EFEITO == "zoom":
             clip_img = clip_img.resize(lambda t: 1 + 0.04 * t)
             
         clips_fundo.append(clip_img)
         
-        # Legenda amarela estilizada
         legenda_path = f"legenda_{i}.png"
         criar_imagem_legenda(frase, DIMENSOES[0] - 80, legenda_path)
         pos_y = DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250
