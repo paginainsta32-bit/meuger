@@ -33,15 +33,21 @@ HEADERS_DOWNLOAD = {
 }
 
 def limpar_roteiro(texto):
-    linhas = texto.split('\n')
-    linhas_limpas = []
-    for linha in linhas:
-        l = re.sub(r'^(Cena\s*\d+|Narrador|Garoto|Homem|Mulher|Voz).*?:', '', linha, flags=re.IGNORECASE)
-        l = re.sub(r'\(.*?\)|\[.*?\]', '', l).strip()
-        if l:
-            linhas_limpas.append(l)
-    return linhas_limpas if linhas_limpas else [texto.strip()]
-
+    # Remove marcadores como "Cena 1:" ou "[Música]"
+    t = re.sub(r'^(Cena\s*\d+|Narrador|Garoto|Homem|Mulher|Voz).*?:', '', texto, flags=re.IGNORECASE)
+    t = re.sub(r'\(.*?\)|\[.*?\]', '', t)
+    
+    # Quebra por linha ou por pontos finais
+    linhas_brutas = re.split(r'[\n\.]+', t)
+    
+    frases_limpas = []
+    for l in linhas_brutas:
+        item = l.strip()
+        if len(item) > 3:  # Ignora frases vazias ou muito curtas
+            frases_limpas.append(item)
+            
+    print(f"Roteiro dividido em {len(frases_limpas)} cenas/fotos.")
+    return frases_limpas if frases_limpas else [texto.strip()]
 def extrair_termo_busca(frase):
     f = frase.lower()
     mapa = {
