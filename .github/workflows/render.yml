@@ -23,7 +23,7 @@ jobs:
       - name: Instalar Dependências
         run: pip install -r requirements.txt
 
-      - name: Executar Renderização
+- name: Executar Renderização
         env:
           PEXELS_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
