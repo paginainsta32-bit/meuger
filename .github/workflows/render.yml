@@ -28,10 +28,12 @@ jobs:
       - name: Executar Renderização
         env:
           PEXELS_KEY: ${{ secrets.PEXELS_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY" "${{ github.event.client_payload.estilo }}" "${{ github.event.client_payload.efeito }}"
+          python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY" "${{ github.event.client_payload.estilo }}" "${{ github.event.client_payload.efeito }}" "$CF_ACCOUNT_ID" "$CF_API_TOKEN"
 
-      - name: Salvar Vídeo como Artefato e Atualizar Repositório
+      - name: Salvar Vídeo como Artefato
         uses: actions/upload-artifact@v4
         with:
           name: video-pronto
