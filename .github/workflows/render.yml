@@ -1,0 +1,36 @@
+name: Renderizar Vídeo
+
+on:
+  repository_dispatch:
+    types: [gerar_video]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar Código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Instalar Dependências
+        run: pip install -r requirements.txt
+
+      - name: Executar Renderização
+        env:
+          PEXELS_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY"
+
+      - name: Salvar Vídeo como Artefato
+        uses: actions/upload-artifact@v3
+        with:
+          name: video-pronto
+          path: resultado.mp4
