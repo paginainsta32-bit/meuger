@@ -1,4 +1,5 @@
-﻿edge-tts
+edge-tts
 requests
-moviepy
+moviepy==1.0.3
 proglog
+pillow<10.0.0
