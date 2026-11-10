@@ -6,7 +6,12 @@ import requests
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont
 
-# Importação compatível do MoviePy
+# Correção de compatibilidade entre Pillow 10+ e MoviePy 1.0.3
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
+
+# Importação do MoviePy
 try:
     from moviepy.editor import AudioFileClip, VideoFileClip, ImageClip, CompositeVideoClip
 except ImportError:
@@ -33,7 +38,6 @@ async def gerar_audio():
     await communicate.save("narracao.mp3")
 
 def criar_imagem_legenda(texto, largura_max, caminho_saida="legenda.png"):
-    # Cria a imagem transparente da legenda usando Pillow (sem depender de ImageMagick)
     img = Image.new("RGBA", (largura_max, 300), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
@@ -42,7 +46,6 @@ def criar_imagem_legenda(texto, largura_max, caminho_saida="legenda.png"):
     except:
         font = ImageFont.load_default()
 
-    # Desenha fundo preto translúcido e texto branco
     bbox = draw.textbbox((0, 0), texto, font=font)
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     x = (largura_max - w) // 2
@@ -102,7 +105,6 @@ def montar_video():
     fundo = fundo.resize(newsize=DIMENSOES)
     fundo = fundo.set_audio(audio)
 
-    # Gera a legenda via Pillow
     img_legenda = criar_imagem_legenda(ROTEIRO[:80] + ("..." if len(ROTEIRO) > 80 else ""), DIMENSOES[0] - 100)
     legenda = ImageClip(img_legenda).set_duration(duracao_audio).set_position(('center', 'center'))
 
