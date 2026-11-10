@@ -30,7 +30,7 @@ jobs:
           python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY"
 
       - name: Salvar Vídeo como Artefato
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: video-pronto
           path: resultado.mp4
