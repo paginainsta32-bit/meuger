@@ -23,7 +23,7 @@ async def gerar_audio():
 def buscar_video_fundo(query="nature background"):
     print("[2/4] Buscando vídeo de fundo no Pexels...")
     url = f"https://api.pexels.com/videos/search?query={query}&per_page=1&orientation={'portrait' if FORMATO == '9:16' else 'landscape'}"
-    headers = {"Authorization":ad4jE5qOvBqxv2XdO3rQ5qnimXMPo5LMcN267k7YzOfd0W5WwZBPVXBJ}
+    headers = {"Authorization": PEXELS_API_KEY}
     response = requests.get(url, headers=headers).json()
     
     if response.get('videos'):
