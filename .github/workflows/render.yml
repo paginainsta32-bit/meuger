@@ -29,9 +29,9 @@ jobs:
         env:
           PEXELS_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
-          python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY"
+          python generate.py "${{ github.event.client_payload.roteiro }}" "${{ github.event.client_payload.formato }}" "$PEXELS_KEY" "${{ github.event.client_payload.estilo }}" "${{ github.event.client_payload.efeito }}"
 
-      - name: Salvar Vídeo como Artefato
+      - name: Salvar Vídeo como Artefato e Atualizar Repositório
         uses: actions/upload-artifact@v4
         with:
           name: video-pronto
