@@ -17,8 +17,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Instalar FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Instalar FFmpeg e ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick
+          # Remove a restrição de segurança do ImageMagick para permitir a criação de TextClip
+          sudo sed -i 's/rights="none" policy="domain" path="coder" value="LABEL"/rights="read|write" policy="domain" path="coder" value="LABEL"/' /etc/ImageMagick-6/policy.xml || true
 
       - name: Instalar Dependências
         run: pip install -r requirements.txt
