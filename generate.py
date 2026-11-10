@@ -89,9 +89,10 @@ def montar_video():
     # Legenda simples centralizada
     legenda = TextClip(
         ROTEIRO, 
-        fontsize=45, 
+        fontsize=40, 
         color='white', 
         bg_color='black',
+        font='DejaVu-Sans',
         method='caption', 
         size=(DIMENSOES[0] - 100, None)
     )
