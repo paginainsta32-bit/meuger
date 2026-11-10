@@ -10,16 +10,15 @@ from PIL import Image, ImageDraw, ImageFont
 # Compatibilidade Pillow / MoviePy
 import PIL.Image
 if not hasattr(PIL.Image, 'ANTIALIAS'):
-    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
+    PIL.Image.ANTIALIAS = getattr(PIL.Image, 'LANCZOS', PIL.Image.BICUBIC)
 
 try:
-    from moviepy.editor import AudioFileClip, VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+    from moviepy.editor import AudioFileClip, VideoFileClip, ImageClip, CompositeVideoClip
 except ImportError:
     from moviepy.video.io.VideoFileClip import VideoFileClip
     from moviepy.audio.io.AudioFileClip import AudioFileClip
     from moviepy.video.VideoClip import ImageClip
     from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-    from moviepy.video.compositing.concatenate import concatenate_videoclips
 
 # 1. Entrada de dados
 ROTEIRO_BRUTO = sys.argv[1] if len(sys.argv) > 1 else "Um garotinho corre alegremente pela floresta em um dia ensolarado."
@@ -34,20 +33,16 @@ HEADERS_DOWNLOAD = {
 }
 
 def limpar_roteiro(texto):
-    # Remove marcadores do tipo: "Cena 1 (0-3s):", "Garoto:", "[Música de fundo]"
     linhas = texto.split('\n')
     linhas_limpas = []
     for linha in linhas:
         l = re.sub(r'^(Cena\s*\d+|Narrador|Garoto|Homem|Mulher|Voz).*?:', '', linha, flags=re.IGNORECASE)
-        l = re.sub(r'\(.*?\)|\[.*?\]', '', l)
-        l = l.strip()
+        l = re.sub(r'\(.*?\)|\[.*?\]', '', l).strip()
         if l:
             linhas_limpas.append(l)
     return linhas_limpas if linhas_limpas else [texto.strip()]
 
 def extrair_palavras_chave(texto):
-    # Dicionário de termos comuns para busca visual no Pexels
-    termos = []
     t = texto.lower()
     mapa_busca = {
         'floresta': 'forest trees', 'garoto': 'boy child running', 'criança': 'kid happy',
@@ -57,49 +52,55 @@ def extrair_palavras_chave(texto):
     }
     for key, val in mapa_busca.items():
         if key in t:
-            termos.append(val)
-    
-    return termos[0] if termos else "nature landscape"
+            return val
+    return "nature landscape"
 
 async def gerar_audio(texto_completo):
     print("[1/4] Gerando narração...")
     communicate = edge_tts.Communicate(texto_completo, VOZ)
     await communicate.save("narracao.mp3")
 
+def medir_texto(draw, texto, font):
+    if hasattr(draw, 'textbbox'):
+        bbox = draw.textbbox((0, 0), texto, font=font)
+        return bbox[2] - bbox[0], bbox[3] - bbox[1]
+    else:
+        return draw.textsize(texto, font=font)
+
 def criar_imagem_legenda(texto, largura_max, caminho_saida):
-    img = Image.new("RGBA", (largura_max, 220), (0, 0, 0, 0))
+    img = Image.new("RGBA", (largura_max, 250), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
     except:
         font = ImageFont.load_default()
 
-    # Quebra o texto se for longo
     palavras = texto.split()
     linhas = []
     linha_atual = ""
+    
     for p in palavras:
         teste = f"{linha_atual} {p}".strip()
-        bbox = draw.textbbox((0, 0), teste, font=font)
-        if (bbox[2] - bbox[0]) <= (largura_max - 80):
+        w, _ = medir_texto(draw, teste, font)
+        if w <= (largura_max - 60):
             linha_atual = teste
         else:
-            linhas.append(linha_atual)
+            if linha_atual:
+                linhas.append(linha_atual)
             linha_atual = p
     if linha_atual:
         linhas.append(linha_atual)
     
     texto_formatado = "\n".join(linhas)
+    w_total, h_total = medir_texto(draw, texto_formatado, font)
+    
+    x = (largura_max - w_total) // 2
+    y = (250 - h_total) // 2
 
-    bbox = draw.textmultilinebbox((0, 0), texto_formatado, font=font)
-    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = (largura_max - w) // 2
-    y = (220 - h) // 2
-
-    padding = 20
-    draw.rectangle([x - padding, y - padding, x + w + padding, y + h + padding], fill=(0, 0, 0, 200))
-    draw.multiline_text((x, y), texto_formatado, fill="yellow", font=font, align="center")
+    padding = 15
+    draw.rectangle([max(0, x - padding), max(0, y - padding), min(largura_max, x + w_total + padding), min(250, y + h_total + padding)], fill=(0, 0, 0, 210))
+    draw.text((x, y), texto_formatado, fill="yellow", font=font, align="center")
     
     img.save(caminho_saida)
     return caminho_saida
@@ -145,19 +146,19 @@ def montar_video(frases_limpas):
     
     fundo = fundo.resize(newsize=DIMENSOES).set_audio(audio)
 
-    # Criação dos blocos de legenda dinâmicos por frase
     clips_legendas = []
     duracao_por_frase = duracao_total / len(frases_limpas)
     
     for i, frase in enumerate(frases_limpas):
         tempo_inicio = i * duracao_por_frase
         img_path = f"legenda_{i}.png"
-        criar_imagem_legenda(frase, DIMENSOES[0] - 100, img_path)
+        criar_imagem_legenda(frase, DIMENSOES[0] - 80, img_path)
         
+        pos_y = DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250
         clip_txt = (ImageClip(img_path)
                     .set_start(tempo_inicio)
                     .set_duration(duracao_por_frase)
-                    .set_position(('center', DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250)))
+                    .set_position(('center', pos_y)))
         clips_legendas.append(clip_txt)
 
     video_final = CompositeVideoClip([fundo] + clips_legendas)
