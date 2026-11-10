@@ -3,8 +3,14 @@ import json
 import asyncio
 import requests
 import edge_tts
-from moviepy.editor import AudioFileClip, VideoFileClip, TextClip, CompositeVideoClip, concatenate_videoclips
-
+try:
+    from moviepy.editor import AudioFileClip, VideoFileClip, TextClip, CompositeVideoClip, concatenate_videoclips
+except ImportError:
+    from moviepy.video.io.VideoFileClip import VideoFileClip
+    from moviepy.audio.io.AudioFileClip import AudioFileClip
+    from moviepy.video.VideoClip import TextClip
+    from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+    from moviepy.video.compositing.concatenate import concatenate_videoclips
 # 1. Configurações recebidas
 ROTEIRO = sys.argv[1] if len(sys.argv) > 1 else "Este é um teste de vídeo automático."
 FORMATO = sys.argv[2] if len(sys.argv) > 2 else "9:16"  # "9:16" ou "16:9"
