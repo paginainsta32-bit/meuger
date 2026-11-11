@@ -3,10 +3,11 @@ import os
 import re
 import asyncio
 import requests
+import urllib.parse
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
-# Tradutor
+# Tradutor de Prompts (PT -> EN)
 try:
     from deep_translator import GoogleTranslator
     HAS_TRANSLATOR = True
@@ -26,18 +27,12 @@ except ImportError:
     from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
     from moviepy.video.compositing.concatenate import concatenate_videoclips
 
-# 1. Configurações e Credenciais
+# 1. Parâmetros Recebidos
 ROTEIRO_BRUTO = sys.argv[1] if len(sys.argv) > 1 else "Um garotinho corre pela floresta."
 FORMATO = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] in ["9:16", "16:9"] else "9:16"
 PEXELS_API_KEY = sys.argv[3] if len(sys.argv) > 3 and "cfut_" not in sys.argv[3] else os.environ.get("PEXELS_KEY", "")
 ESTILO = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] in ["cartoon", "anime", "3d", "realista"] else "3d"
 EFEITO = sys.argv[5] if len(sys.argv) > 5 else "zoom"
-
-# ID e Token da Cloudflare
-CF_ACCOUNT_ID = "251cd36ee0414e5489093709838e0d49"
-p1 = "cfut_EMA1eJ0pyhsj0kW9KWTWGEqBv"
-p2 = "NVhDcfsfluZp8SB1c54937b"
-CF_API_TOKEN = os.environ.get("CF_API_TOKEN", f"{p1}{p2}").strip()
 
 VOZ = "pt-BR-AntonioNeural"
 DIMENSOES = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
@@ -83,10 +78,10 @@ def traduzir_ou_extrair_prompt(frase_pt):
         frase_en = termo
 
     sufixos = {
-        "cartoon": "vibrant 2d cartoon illustration style, disney aesthetic, colorful, 8k",
-        "anime": "anime art style, studio ghibli aesthetic, 8k resolution",
+        "cartoon": "vibrant 2d cartoon illustration style, disney aesthetic, colorful, 8k resolution",
+        "anime": "anime art style, studio ghibli aesthetic, makoto shinkai lighting, 8k resolution",
         "3d": "3d render animation, pixar character style, disney 3d movie, unreal engine 5 render, cute, highly detailed",
-        "realista": "cinematic realistic photo, 8k, professional photography, sharp focus"
+        "realista": "cinematic realistic photo, hyperrealistic, 8k, professional photography, sharp focus"
     }
     
     sufixo = sufixos.get(ESTILO, sufixos["3d"])
@@ -97,40 +92,26 @@ async def gerar_audio(texto_completo):
     communicate = edge_tts.Communicate(texto_completo, VOZ)
     await communicate.save("narracao.mp3")
 
-def gerador_imagem_flux(prompt, nome_saida):
-    print(f"🎨 Chamando Cloudflare FLUX-1-Schnell...")
+def gerador_imagem_ia_gratis(prompt, nome_saida):
+    print(f"🎨 Gerando imagem IA (Pollinations.ai)...")
     print(f"Prompt: '{prompt}'")
     
-    # URL oficial sem barras duplicadas
-    model_name = "@cf/blackforestlabs/flux-1-schnell"
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model_name}"
+    prompt_encoded = urllib.parse.quote(prompt)
+    largura, altura = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
     
-    headers = {
-        "Authorization": f"Bearer {CF_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "prompt": prompt
-    }
+    # API 100% Grátis e Direta sem Chaves
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed=42"
     
-    response = requests.post(url, headers=headers, json=payload, timeout=60)
-    print(f"--> Status retornado pela Cloudflare: {response.status_code}")
+    response = requests.get(url, headers=HEADERS_DOWNLOAD, timeout=45)
+    print(f"--> Status Imagem IA: {response.status_code}")
 
     if response.status_code == 200:
-        res_json = response.json()
-        if res_json.get("success") and "result" in res_json and "image" in res_json["result"]:
-            import base64
-            image_bytes = base64.b64decode(res_json["result"]["image"])
-            with open(nome_saida, "wb") as f:
-                f.write(image_bytes)
-            print("✅ IMAGEM IA GERADA COM SUCESSO PELO FLUX.1!")
-            return nome_saida
-        else:
-            print(f"❌ Resposta sem campo 'image': {res_json}")
+        with open(nome_saida, "wb") as f:
+            f.write(response.content)
+        print("✅ IMAGEM IA GERADA COM SUCESSO!")
+        return nome_saida
     else:
-        print(f"❌ ERRO DA CLOUDFLARE ({response.status_code}): {response.text}")
-        
-    raise Exception(f"Falha na API da Cloudflare (HTTP {response.status_code})")
+        raise Exception(f"Erro na API de IA (Status HTTP {response.status_code})")
 
 def processar_e_ajustar_imagem(caminho_imagem):
     img = Image.open(caminho_imagem)
@@ -203,14 +184,15 @@ def obter_imagem_cena(frase_pt, index):
 
     print(f"\n--- Processando Cena {index+1} ---")
 
+    # 1. Tenta Gerar com a IA Grátis
     try:
-        gerador_imagem_flux(prompt_en, nome_foto)
+        gerador_imagem_ia_gratis(prompt_en, nome_foto)
         processar_e_ajustar_imagem(nome_foto)
         return nome_foto
     except Exception as e:
-        print(f"⚠️ Erro no FLUX.1: {e}")
+        print(f"⚠️ Aviso na IA principal: {e}")
 
-    # Fallback Pexels
+    # 2. Fallback Pexels de Emergência
     print("Recorrendo ao Pexels de emergência...")
     try:
         url = f"https://api.pexels.com/v1/search?query={frase_pt}&per_page=1"
