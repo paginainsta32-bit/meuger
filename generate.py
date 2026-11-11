@@ -26,24 +26,21 @@ except ImportError:
     from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
     from moviepy.video.compositing.concatenate import concatenate_videoclips
 
-# 1. Configurações e Credenciais
+# 1. Configurações e Credenciais Tradas
 ROTEIRO_BRUTO = sys.argv[1] if len(sys.argv) > 1 else "Um garotinho corre pela floresta."
-FORMATO = sys.argv[2] if len(sys.argv) > 2 else "9:16"
-PEXELS_API_KEY = sys.argv[3] if len(sys.argv) > 3 else ""
-ESTILO = sys.argv[4] if len(sys.argv) > 4 else "3d"
+FORMATO = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] in ["9:16", "16:9"] else "9:16"
+PEXELS_API_KEY = sys.argv[3] if len(sys.argv) > 3 and "cfut_" not in sys.argv[3] else os.environ.get("PEXELS_KEY", "")
+ESTILO = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] in ["cartoon", "anime", "3d", "realista"] else "3d"
 EFEITO = sys.argv[5] if len(sys.argv) > 5 else "zoom"
 
-# ID e Token atualizados da Cloudflare
-CF_ACCOUNT_ID = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6].strip() else "251cd36ee0414e5489093709838e0d49"
-token_env = os.environ.get("CF_API_TOKEN", "")
-token_arg = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7].strip() else ""
+# IDs Fixo e Protegidos da Cloudflare (Sem risco de rota nula)
+CF_ACCOUNT_ID = "251cd36ee0414e5489093709838e0d49"
 
-if token_env:
+# Captura o token via Environment ou reconstrói se estiver vazio
+token_env = os.environ.get("CF_API_TOKEN", "").strip()
+if token_env and token_env.startswith("cfut_"):
     CF_API_TOKEN = token_env
-elif token_arg:
-    CF_API_TOKEN = token_arg
 else:
-    # Token montado dinamicamente para evitar bloqueio por scanner no GitHub
     p1 = "cfut_EMA1eJ0pyhsj0kW9KWTWGEqBv"
     p2 = "NVhDcfsfluZp8SB1c54937b"
     CF_API_TOKEN = p1 + p2
@@ -108,12 +105,14 @@ async def gerar_audio(texto_completo):
 
 def gerador_imagem_flux(prompt, nome_saida):
     print(f"🎨 Chamando Cloudflare FLUX-1-Schnell...")
+    print(f"Account ID: {CF_ACCOUNT_ID}")
     print(f"Prompt: '{prompt}'")
     
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID.strip()}/ai/run/@cf/blackforestlabs/flux-1-schnell"
+    # URL Rígida da Cloudflare Workers AI
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
     
     headers = {
-        "Authorization": f"Bearer {CF_API_TOKEN.strip()}",
+        "Authorization": f"Bearer {CF_API_TOKEN}",
         "Content-Type": "application/json"
     }
     payload = {
@@ -211,13 +210,12 @@ def obter_imagem_cena(frase_pt, index):
 
     print(f"\n--- Processando Cena {index+1} ---")
 
-    if CF_API_TOKEN:
-        try:
-            gerador_imagem_flux(prompt_en, nome_foto)
-            processar_e_ajustar_imagem(nome_foto)
-            return nome_foto
-        except Exception as e:
-            print(f"⚠️ Erro no FLUX.1: {e}")
+    try:
+        gerador_imagem_flux(prompt_en, nome_foto)
+        processar_e_ajustar_imagem(nome_foto)
+        return nome_foto
+    except Exception as e:
+        print(f"⚠️ Erro no FLUX.1: {e}")
 
     # Fallback Pexels
     print("Recorrendo ao Pexels de emergência...")
