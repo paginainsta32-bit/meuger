@@ -1,6 +1,7 @@
 edge-tts
 requests
 moviepy==1.0.3
+imageio-ffmpeg
 proglog
 Pillow
 deep-translator
