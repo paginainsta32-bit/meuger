@@ -2,4 +2,5 @@ edge-tts
 requests
 moviepy==1.0.3
 proglog
-Pillow<10.0.0
+Pillow
+deep-translator
