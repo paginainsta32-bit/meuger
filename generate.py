@@ -6,7 +6,7 @@ import requests
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
-# Importação do Tradutor com fallback para não quebrar a execução
+# Tentativa de importação do tradutor
 try:
     from deep_translator import GoogleTranslator
     HAS_TRANSLATOR = True
@@ -26,14 +26,16 @@ except ImportError:
     from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
     from moviepy.video.compositing.concatenate import concatenate_videoclips
 
-# 1. Dados recebidos do site
+# 1. Configurações e Credenciais
 ROTEIRO_BRUTO = sys.argv[1] if len(sys.argv) > 1 else "Um garotinho corre pela floresta."
 FORMATO = sys.argv[2] if len(sys.argv) > 2 else "9:16"
 PEXELS_API_KEY = sys.argv[3] if len(sys.argv) > 3 else ""
 ESTILO = sys.argv[4] if len(sys.argv) > 4 else "3d"
 EFEITO = sys.argv[5] if len(sys.argv) > 5 else "zoom"
-CF_ACCOUNT_ID = sys.argv[6] if len(sys.argv) > 6 else ""
-CF_API_TOKEN = sys.argv[7] if len(sys.argv) > 7 else ""
+
+# ID fixo da sua conta Cloudflare
+CF_ACCOUNT_ID = "251cd36ee0414e5489093709838e0d49"
+CF_API_TOKEN = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7].strip() else os.environ.get("CF_API_TOKEN", "")
 
 VOZ = "pt-BR-AntonioNeural"
 DIMENSOES = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
@@ -54,21 +56,36 @@ def limpar_roteiro(texto):
             frases_limpas.append(item)
     return frases_limpas if frases_limpas else [texto.strip()]
 
-def construir_prompt_flux(frase_pt):
+def traduzir_ou_extrair_prompt(frase_pt):
+    frase_en = None
     if HAS_TRANSLATOR:
         try:
             frase_en = GoogleTranslator(source='pt', target='en').translate(frase_pt)
-        except Exception as e:
-            print(f"Aviso na tradução: {e}")
-            frase_en = frase_pt
-    else:
-        frase_en = frase_pt
+        except Exception:
+            pass
+
+    if not frase_en:
+        # Fallback de dicionário simples caso o tradutor seja limitado por IP
+        mapa = {
+            'parque': 'magical playground park with giant flowers rainbow',
+            'floresta': 'enchanted forest with tall green trees',
+            'criança': 'cute smiling kids running happy',
+            'garoto': 'young boy running happily',
+            'cachorro': 'cute dog wagging tail running',
+            'rio': 'sparkling clear river stream'
+        }
+        termo = "magical fantasy scene, colorful background"
+        for k, v in mapa.items():
+            if k in frase_pt.lower():
+                termo = v
+                break
+        frase_en = termo
 
     sufixos = {
-        "cartoon": "vibrant 2d cartoon illustration style, disney pixar aesthetic, colorful, highly detailed",
-        "anime": "anime art style, studio ghibli aesthetic, makoto shinkai lighting, 8k resolution",
-        "3d": "3d render animation, pixar character style, disney 3d movie, unreal engine 5, octane render, cute, highly detailed",
-        "realista": "cinematic realistic photo, hyperrealistic, 8k, professional photography, dramatic lighting"
+        "cartoon": "vibrant 2d cartoon illustration style, disney aesthetic, colorful, 8k",
+        "anime": "anime art style, studio ghibli aesthetic, 8k resolution",
+        "3d": "3d render animation, pixar character style, disney 3d movie, unreal engine 5 render, cute, highly detailed",
+        "realista": "cinematic realistic photo, 8k, professional photography, sharp focus"
     }
     
     sufixo = sufixos.get(ESTILO, sufixos["3d"])
@@ -80,7 +97,7 @@ async def gerar_audio(texto_completo):
     await communicate.save("narracao.mp3")
 
 def gerador_imagem_flux(prompt, nome_saida):
-    print(f"🎨 Enviando chamada para a Cloudflare Workers AI (FLUX-1-Schnell)...")
+    print(f"🎨 Chamando Cloudflare FLUX-1-Schnell...")
     print(f"Prompt: '{prompt}'")
     
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
@@ -107,7 +124,7 @@ def gerador_imagem_flux(prompt, nome_saida):
             print("✅ IMAGEM IA GERADA COM SUCESSO PELO FLUX.1!")
             return nome_saida
         else:
-            print(f"❌ Resposta sem campo 'image' da Cloudflare: {res_json}")
+            print(f"❌ Resposta sem campo 'image': {res_json}")
     else:
         print(f"❌ ERRO DA CLOUDFLARE ({response.status_code}): {response.text}")
         
@@ -180,13 +197,11 @@ def criar_imagem_legenda(texto_pt, largura_max, caminho_saida):
 
 def obter_imagem_cena(frase_pt, index):
     nome_foto = f"foto_{index}.jpg"
-    prompt_en = construir_prompt_flux(frase_pt)
+    prompt_en = traduzir_ou_extrair_prompt(frase_pt)
 
     print(f"\n--- Processando Cena {index+1} ---")
-    print(f"CF_ACCOUNT_ID: '{CF_ACCOUNT_ID}'")
-    print(f"CF_API_TOKEN definido: {bool(CF_API_TOKEN)}")
 
-    if CF_ACCOUNT_ID and CF_API_TOKEN:
+    if CF_API_TOKEN:
         try:
             gerador_imagem_flux(prompt_en, nome_foto)
             processar_e_ajustar_imagem(nome_foto)
@@ -194,7 +209,7 @@ def obter_imagem_cena(frase_pt, index):
         except Exception as e:
             print(f"⚠️ Erro no FLUX.1: {e}")
 
-    # Fallback se a Cloudflare falhar
+    # Fallback Pexels
     print("Recorrendo ao Pexels de emergência...")
     try:
         url = f"https://api.pexels.com/v1/search?query={frase_pt}&per_page=1"
