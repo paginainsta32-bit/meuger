@@ -167,4 +167,117 @@ def processar_e_ajustar_imagem(caminho_imagem):
     right = left + w_target
     bottom = top + h_target
     
-    img_cropped = img_resized.crop((left, top,
+    img_cropped = img_resized.crop((left, top, right, bottom))
+    img_cropped.save(caminho_imagem)
+
+def criar_imagem_legenda(texto_pt, largura_max, caminho_saida):
+    img = Image.new("RGBA", (largura_max, 260), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
+    except:
+        font = ImageFont.load_default()
+
+    palavras = texto_pt.split()
+    linhas = []
+    linha_atual = ""
+    for p in palavras:
+        teste = f"{linha_atual} {p}".strip()
+        bbox = draw.textbbox((0, 0), teste, font=font) if hasattr(draw, 'textbbox') else (0,0,100,20)
+        w = bbox[2] - bbox[0]
+        if w <= (largura_max - 60):
+            linha_atual = teste
+        else:
+            if linha_atual: linhas.append(linha_atual)
+            linha_atual = p
+    if linha_atual: linhas.append(linha_atual)
+    
+    texto_formatado = "\n".join(linhas)
+    x, y = 40, 40
+
+    draw.rectangle([10, 10, largura_max - 10, 240], fill=(0, 0, 0, 210))
+    draw.multiline_text((x, y), texto_formatado, fill="#facc15", font=font, align="center")
+    
+    img.save(caminho_saida)
+    return caminho_saida
+
+def obter_imagem_cena(frase_pt, index):
+    nome_foto = f"foto_{index}.jpg"
+    prompt_en = traduzir_ou_extrair_prompt(frase_pt, index)
+
+    print(f"\n--- Processando Cena {index+1} ---")
+
+    # 1. Tenta a IA com rotação de modelos
+    try:
+        gerador_imagem_ia_gratis(prompt_en, nome_foto, index)
+        processar_e_ajustar_imagem(nome_foto)
+        return nome_foto
+    except Exception as e:
+        print(f"⚠️ Aviso na IA principal: {e}")
+
+    # 2. Fallback Pexels de Emergência
+    print("Recorrendo ao Pexels de emergência...")
+    try:
+        url = f"https://api.pexels.com/v1/search?query={frase_pt}&per_page=1"
+        headers = {"Authorization": PEXELS_API_KEY} if PEXELS_API_KEY else {}
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200 and res.json().get('photos'):
+            img_url = res.json()['photos'][0]['src']['large2x']
+            r = requests.get(img_url, timeout=20)
+            with open(nome_foto, "wb") as f: f.write(r.content)
+            processar_e_ajustar_imagem(nome_foto)
+            return nome_foto
+    except:
+        pass
+
+    img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
+    r = requests.get(img_fallback, timeout=20)
+    with open(nome_foto, "wb") as f: f.write(r.content)
+    processar_e_ajustar_imagem(nome_foto)
+    return nome_foto
+
+def montar_video(frases_limpas):
+    print("[3/4] Montando imagens e narração...")
+    audio = AudioFileClip("narracao.mp3")
+    duracao_total = audio.duration
+    duracao_por_cena = duracao_total / len(frases_limpas)
+
+    clips_fundo = []
+    clips_legendas = []
+
+    for i, frase_pt in enumerate(frases_limpas):
+        tempo_inicio = i * duracao_por_cena
+        foto_path = obter_imagem_cena(frase_pt, i)
+        
+        clip_img = (ImageClip(foto_path)
+                    .set_duration(duracao_por_cena)
+                    .resize(newsize=DIMENSOES))
+        
+        if EFEITO == "zoom":
+            clip_img = clip_img.resize(lambda t: 1 + 0.04 * t)
+            
+        clips_fundo.append(clip_img)
+        
+        legenda_path = f"legenda_{i}.png"
+        criar_imagem_legenda(frase_pt, DIMENSOES[0] - 80, legenda_path)
+        pos_y = DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250
+        
+        clip_leg = (ImageClip(legenda_path)
+                    .set_start(tempo_inicio)
+                    .set_duration(duracao_por_cena)
+                    .set_position(('center', pos_y)))
+        clips_legendas.append(clip_leg)
+
+    fundo_sequencial = concatenate_videoclips(clips_fundo, method="compose").set_audio(audio)
+    video_final = CompositeVideoClip([fundo_sequencial] + clips_legendas)
+
+    print("[4/4] Renderizando MP4 final...")
+    video_final.write_videofile("resultado.mp4", fps=24, codec="libx264", audio_codec="aac")
+
+if __name__ == "__main__":
+    frases = limpar_roteiro(ROTEIRO_BRUTO)
+    texto_narracao = " ".join(frases)
+    
+    asyncio.run(gerar_audio(texto_narracao))
+    montar_video(frases)
