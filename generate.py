@@ -9,7 +9,7 @@ import urllib.parse
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
-# Tradutor de Prompts (PT -> EN)
+# Tradutor
 try:
     from deep_translator import GoogleTranslator
     HAS_TRANSLATOR = True
@@ -63,10 +63,34 @@ def traduzir_ou_extrair_prompt(frase_pt, index):
         except Exception:
             pass
 
-    if not frase_en:
-        # Extração manual limpa por palavras-chave
-        palavras = [p for p in frase_pt.split() if len(p) > 3]
-        frase_en = " ".join(palavras[:6]) if palavras else f"scene {index+1}"
+    # Tradução local instantânea caso a API do Google Translate bloqueie
+    if not frase_en or frase_en == frase_pt:
+        dicionario = {
+            'parque': 'magical playground park with giant flowers',
+            'árvores': 'colorful trees and rainbow',
+            'flores': 'giant magical flowers',
+            'brinquedos': 'playground toys',
+            'pedro': 'cute little boy Pedro',
+            'luna': 'cute little girl Luna',
+            'bidu': 'playful cute puppy dog',
+            'correndo': 'running happily and smiling',
+            'sorrindo': 'smiling cheerful',
+            'pulando': 'jumping happily',
+            'rabinho': 'wagging little tail',
+            'floresta': 'enchanted green forest',
+            'cidade': 'modern city street',
+            'carro': 'fast modern sport car'
+        }
+        palavras_en = []
+        for p in frase_pt.lower().split():
+            p_limpa = re.sub(r'[^\w]', '', p)
+            if p_limpa in dicionario:
+                palavras_en.append(dicionario[p_limpa])
+        
+        if palavras_en:
+            frase_en = ", ".join(palavras_en)
+        else:
+            frase_en = f"cute characters in scene number {index+1}"
 
     sufixos = {
         "cartoon": "vibrant 2d cartoon illustration style, disney aesthetic, colorful, 8k resolution",
@@ -85,40 +109,33 @@ async def gerar_audio(texto_completo):
 
 def gerador_imagem_ia_gratis(prompt, nome_saida, index):
     print(f"🎨 Gerando imagem IA (Pollinations)...")
-    print(f"Prompt: '{prompt}'")
+    print(f"Prompt EN: '{prompt}'")
     
-    # Pausa de 2 segundos entre chamadas para zerar limite de frequência
     if index > 0:
-        time.sleep(2)
+        time.sleep(3)  # Pausa essencial entre chamadas
 
     prompt_encoded = urllib.parse.quote(prompt)
     largura, altura = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
-    seed_random = random.randint(1, 999999)
+    seed_random = random.randint(1000, 999999)
     
-    # Tentativa 1: Endpoint Padrão
-    url1 = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed={seed_random}"
-    res1 = requests.get(url1, headers=HEADERS_DOWNLOAD, timeout=45)
-    print(f"--> Status Imagem IA (Tentativa 1): {res1.status_code}")
+    # Lista de endpoints/modelos para rotação automática
+    modelos = ["flux", "turbo", "pixart"]
 
-    if res1.status_code == 200:
-        with open(nome_saida, "wb") as f:
-            f.write(res1.content)
-        print("✅ IMAGEM IA GERADA COM SUCESSO!")
-        return nome_saida
+    for model in modelos:
+        url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed={seed_random}&model={model}"
+        try:
+            res = requests.get(url, headers=HEADERS_DOWNLOAD, timeout=40)
+            print(f"--> Modelo '{model}' Status: {res.status_code}")
+            if res.status_code == 200 and len(res.content) > 5000:
+                with open(nome_saida, "wb") as f:
+                    f.write(res.content)
+                print(f"✅ IMAGEM IA GERADA COM SUCESSO (Modelo: {model})!")
+                return nome_saida
+        except Exception as err:
+            print(f"Aviso no modelo {model}: {err}")
+        time.sleep(2)
 
-    # Tentativa 2: Endpoint Turbo (Em caso de erro 402 ou limite)
-    time.sleep(2)
-    url2 = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&model=turbo&seed={seed_random}"
-    res2 = requests.get(url2, headers=HEADERS_DOWNLOAD, timeout=45)
-    print(f"--> Status Imagem IA (Tentativa 2 Turbo): {res2.status_code}")
-
-    if res2.status_code == 200:
-        with open(nome_saida, "wb") as f:
-            f.write(res2.content)
-        print("✅ IMAGEM IA (TURBO) GERADA COM SUCESSO!")
-        return nome_saida
-
-    raise Exception(f"Erro na API de IA (HTTP {res1.status_code})")
+    raise Exception("Todos os modelos de IA falharam temporariamente.")
 
 def processar_e_ajustar_imagem(caminho_imagem):
     img = Image.open(caminho_imagem)
@@ -150,117 +167,4 @@ def processar_e_ajustar_imagem(caminho_imagem):
     right = left + w_target
     bottom = top + h_target
     
-    img_cropped = img_resized.crop((left, top, right, bottom))
-    img_cropped.save(caminho_imagem)
-
-def criar_imagem_legenda(texto_pt, largura_max, caminho_saida):
-    img = Image.new("RGBA", (largura_max, 260), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    
-    try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
-    except:
-        font = ImageFont.load_default()
-
-    palavras = texto_pt.split()
-    linhas = []
-    linha_atual = ""
-    for p in palavras:
-        teste = f"{linha_atual} {p}".strip()
-        bbox = draw.textbbox((0, 0), teste, font=font) if hasattr(draw, 'textbbox') else (0,0,100,20)
-        w = bbox[2] - bbox[0]
-        if w <= (largura_max - 60):
-            linha_atual = teste
-        else:
-            if linha_atual: linhas.append(linha_atual)
-            linha_atual = p
-    if linha_atual: linhas.append(linha_atual)
-    
-    texto_formatado = "\n".join(linhas)
-    x, y = 40, 40
-
-    draw.rectangle([10, 10, largura_max - 10, 240], fill=(0, 0, 0, 210))
-    draw.multiline_text((x, y), texto_formatado, fill="#facc15", font=font, align="center")
-    
-    img.save(caminho_saida)
-    return caminho_saida
-
-def obter_imagem_cena(frase_pt, index):
-    nome_foto = f"foto_{index}.jpg"
-    prompt_en = traduzir_ou_extrair_prompt(frase_pt, index)
-
-    print(f"\n--- Processando Cena {index+1} ---")
-
-    # 1. Tenta Gerar com a IA Grátis
-    try:
-        gerador_imagem_ia_gratis(prompt_en, nome_foto, index)
-        processar_e_ajustar_imagem(nome_foto)
-        return nome_foto
-    except Exception as e:
-        print(f"⚠️ Aviso na IA principal: {e}")
-
-    # 2. Fallback Pexels de Emergência
-    print("Recorrendo ao Pexels de emergência...")
-    try:
-        url = f"https://api.pexels.com/v1/search?query={frase_pt}&per_page=1"
-        headers = {"Authorization": PEXELS_API_KEY} if PEXELS_API_KEY else {}
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200 and res.json().get('photos'):
-            img_url = res.json()['photos'][0]['src']['large2x']
-            r = requests.get(img_url, timeout=20)
-            with open(nome_foto, "wb") as f: f.write(r.content)
-            processar_e_ajustar_imagem(nome_foto)
-            return nome_foto
-    except:
-        pass
-
-    img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
-    r = requests.get(img_fallback, timeout=20)
-    with open(nome_foto, "wb") as f: f.write(r.content)
-    processar_e_ajustar_imagem(nome_foto)
-    return nome_foto
-
-def montar_video(frases_limpas):
-    print("[3/4] Montando imagens e narração...")
-    audio = AudioFileClip("narracao.mp3")
-    duracao_total = audio.duration
-    duracao_por_cena = duracao_total / len(frases_limpas)
-
-    clips_fundo = []
-    clips_legendas = []
-
-    for i, frase_pt in enumerate(frases_limpas):
-        tempo_inicio = i * duracao_por_cena
-        foto_path = obter_imagem_cena(frase_pt, i)
-        
-        clip_img = (ImageClip(foto_path)
-                    .set_duration(duracao_por_cena)
-                    .resize(newsize=DIMENSOES))
-        
-        if EFEITO == "zoom":
-            clip_img = clip_img.resize(lambda t: 1 + 0.04 * t)
-            
-        clips_fundo.append(clip_img)
-        
-        legenda_path = f"legenda_{i}.png"
-        criar_imagem_legenda(frase_pt, DIMENSOES[0] - 80, legenda_path)
-        pos_y = DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250
-        
-        clip_leg = (ImageClip(legenda_path)
-                    .set_start(tempo_inicio)
-                    .set_duration(duracao_por_cena)
-                    .set_position(('center', pos_y)))
-        clips_legendas.append(clip_leg)
-
-    fundo_sequencial = concatenate_videoclips(clips_fundo, method="compose").set_audio(audio)
-    video_final = CompositeVideoClip([fundo_sequencial] + clips_legendas)
-
-    print("[4/4] Renderizando MP4 final...")
-    video_final.write_videofile("resultado.mp4", fps=24, codec="libx264", audio_codec="aac")
-
-if __name__ == "__main__":
-    frases = limpar_roteiro(ROTEIRO_BRUTO)
-    texto_narracao = " ".join(frases)
-    
-    asyncio.run(gerar_audio(texto_narracao))
-    montar_video(frases)
+    img_cropped = img_resized.crop((left, top,
