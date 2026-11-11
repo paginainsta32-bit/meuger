@@ -20,7 +20,7 @@ except ImportError:
     from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
     from moviepy.video.compositing.concatenate import concatenate_videoclips
 
-# 1. Dados recebidos
+# 1. Dados recebidos do site
 ROTEIRO_BRUTO = sys.argv[1] if len(sys.argv) > 1 else "Um garotinho corre pela floresta."
 FORMATO = sys.argv[2] if len(sys.argv) > 2 else "9:16"
 PEXELS_API_KEY = sys.argv[3] if len(sys.argv) > 3 else ""
@@ -49,10 +49,8 @@ def limpar_roteiro(texto):
     return frases_limpas if frases_limpas else [texto.strip()]
 
 def construir_prompt_flux(frase_pt):
-    # Traduz automaticamente a frase de português para inglês para a IA entender
     try:
         frase_en = GoogleTranslator(source='pt', target='en').translate(frase_pt)
-        print(f"🔤 Tradução: '{frase_pt[:30]}...' -> '{frase_en[:30]}...'")
     except Exception as e:
         print(f"Aviso na tradução: {e}")
         frase_en = frase_pt
@@ -73,7 +71,7 @@ async def gerar_audio(texto_completo):
     await communicate.save("narracao.mp3")
 
 def gerador_imagem_flux(prompt, nome_saida):
-    print(f"🎨 Enviando prompt para a Cloudflare FLUX-1-Schnell: '{prompt[:70]}...'")
+    print(f"🎨 Gerando imagem IA (FLUX-1-Schnell)...")
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
     
     headers = {
@@ -86,7 +84,6 @@ def gerador_imagem_flux(prompt, nome_saida):
     }
     
     response = requests.post(url, headers=headers, json=payload, timeout=60)
-    print(f"Status API Cloudflare: {response.status_code}")
 
     if response.status_code == 200:
         res_json = response.json()
@@ -97,27 +94,45 @@ def gerador_imagem_flux(prompt, nome_saida):
                 f.write(image_bytes)
             print("✅ Imagem IA criada com sucesso pelo FLUX.1!")
             return nome_saida
-        else:
-            print(f"❌ Resposta inválida da Cloudflare: {res_json}")
+    raise Exception("Falha na geração via Cloudflare")
+
+def processar_e_ajustar_imagem(caminho_imagem):
+    # Recorta e ajusta a imagem para preencher toda a tela sem bordas pretas
+    img = Image.open(caminho_imagem)
+    
+    if EFEITO == "vivido":
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(1.5)
+    elif EFEITO == "vintage":
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(0.7)
+
+    # Redimensionamento inteligente (Crop Cover)
+    w_target, h_target = DIMENSOES
+    w_orig, h_orig = img.size
+    
+    ratio_target = w_target / h_target
+    ratio_orig = w_orig / h_orig
+    
+    if ratio_orig > ratio_target:
+        new_w = int(h_target * ratio_orig)
+        new_h = h_target
     else:
-        print(f"❌ Erro HTTP na Cloudflare ({response.status_code}): {response.text}")
+        new_w = w_target
+        new_h = int(w_target / ratio_orig)
         
-    raise Exception("Falha ao gerar com FLUX.1")
+    img_resized = img.resize((new_w, new_h), Image.LANCZOS)
+    
+    left = (new_w - w_target) // 2
+    top = (new_h - h_target) // 2
+    right = left + w_target
+    bottom = top + h_target
+    
+    img_cropped = img_resized.crop((left, top, right, bottom))
+    img_cropped.save(caminho_imagem)
 
-def aplicar_efeito_filtro(caminho_imagem):
-    try:
-        img = Image.open(caminho_imagem)
-        if EFEITO == "vivido":
-            enhancer = ImageEnhance.Color(img)
-            img = enhancer.enhance(1.5)
-        elif EFEITO == "vintage":
-            enhancer = ImageEnhance.Color(img)
-            img = enhancer.enhance(0.7)
-        img.save(caminho_imagem)
-    except Exception as e:
-        print(f"Aviso no filtro: {e}")
-
-def criar_imagem_legenda(texto, largura_max, caminho_saida):
+def criar_imagem_legenda(texto_pt, largura_max, caminho_saida):
+    # Gera a legenda em PORTUGUÊS
     img = Image.new("RGBA", (largura_max, 260), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
@@ -126,7 +141,7 @@ def criar_imagem_legenda(texto, largura_max, caminho_saida):
     except:
         font = ImageFont.load_default()
 
-    palavras = texto.split()
+    palavras = texto_pt.split()
     linhas = []
     linha_atual = ""
     for p in palavras:
@@ -149,37 +164,23 @@ def criar_imagem_legenda(texto, largura_max, caminho_saida):
     img.save(caminho_saida)
     return caminho_saida
 
-def obter_imagem_cena(frase, index):
+def obter_imagem_cena(frase_pt, index):
     nome_foto = f"foto_{index}.jpg"
-    prompt = construir_prompt_flux(frase)
+    prompt_en = construir_prompt_flux(frase_pt)
 
-    # 1. Tenta a Cloudflare (FLUX.1)
     if CF_ACCOUNT_ID and CF_API_TOKEN:
         try:
-            gerador_imagem_flux(prompt, nome_foto)
-            aplicar_efeito_filtro(nome_foto)
+            gerador_imagem_flux(prompt_en, nome_foto)
+            processar_e_ajustar_imagem(nome_foto)
             return nome_foto
         except Exception as e:
             print(f"⚠️ Cloudflare falhou na cena {index+1}: {e}")
 
-    # 2. Fallback Pexels de segurança
-    print("Recorrendo ao Pexels de emergência...")
-    try:
-        url = f"https://api.pexels.com/v1/search?query={prompt}&per_page=1"
-        headers = {"Authorization": PEXELS_API_KEY} if PEXELS_API_KEY else {}
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200 and res.json().get('photos'):
-            img_url = res.json()['photos'][0]['src']['large2x']
-            r = requests.get(img_url, timeout=20)
-            with open(nome_foto, "wb") as f: f.write(r.content)
-            aplicar_efeito_filtro(nome_foto)
-            return nome_foto
-    except:
-        pass
-
+    # Fallback de emergência
     img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
     r = requests.get(img_fallback, timeout=20)
     with open(nome_foto, "wb") as f: f.write(r.content)
+    processar_e_ajustar_imagem(nome_foto)
     return nome_foto
 
 def montar_video(frases_limpas):
@@ -191,9 +192,9 @@ def montar_video(frases_limpas):
     clips_fundo = []
     clips_legendas = []
 
-    for i, frase in enumerate(frases_limpas):
+    for i, frase_pt in enumerate(frases_limpas):
         tempo_inicio = i * duracao_por_cena
-        foto_path = obter_imagem_cena(frase, i)
+        foto_path = obter_imagem_cena(frase_pt, i)
         
         clip_img = (ImageClip(foto_path)
                     .set_duration(duracao_por_cena)
@@ -204,8 +205,9 @@ def montar_video(frases_limpas):
             
         clips_fundo.append(clip_img)
         
+        # Passa a frase em PORTUGUÊS para a legenda
         legenda_path = f"legenda_{i}.png"
-        criar_imagem_legenda(frase, DIMENSOES[0] - 80, legenda_path)
+        criar_imagem_legenda(frase_pt, DIMENSOES[0] - 80, legenda_path)
         pos_y = DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250
         
         clip_leg = (ImageClip(legenda_path)
