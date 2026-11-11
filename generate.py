@@ -1,6 +1,7 @@
 import sys
 import os
 import re
+import time
 import random
 import asyncio
 import requests
@@ -93,16 +94,20 @@ async def gerar_audio(texto_completo):
     communicate = edge_tts.Communicate(texto_completo, VOZ)
     await communicate.save("narracao.mp3")
 
-def gerador_imagem_ia_gratis(prompt, nome_saida):
+def gerador_imagem_ia_gratis(prompt, nome_saida, index):
     print(f"🎨 Gerando imagem IA (Pollinations)...")
     print(f"Prompt: '{prompt}'")
     
     prompt_encoded = urllib.parse.quote(prompt)
     largura, altura = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
-    seed_aleatoria = random.randint(1, 999999)
+    seed_random = random.randint(1, 999999)
     
-    # URL sem limitação de taxa (com seed dinâmica por cena e model flux)
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed={seed_aleatoria}&model=flux"
+    # Pausa intencional para evitar limite de frequência da API
+    if index > 0:
+        time.sleep(3)
+
+    # Tentativa 1: Endpoint Pollinations Flux Padrão
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed={seed_random}"
     
     response = requests.get(url, headers=HEADERS_DOWNLOAD, timeout=45)
     print(f"--> Status Imagem IA: {response.status_code}")
@@ -113,6 +118,15 @@ def gerador_imagem_ia_gratis(prompt, nome_saida):
         print("✅ IMAGEM IA GERADA COM SUCESSO!")
         return nome_saida
     else:
+        # Tentativa 2: Endpoint Alternativo Turbo
+        url_turbo = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&model=turbo&seed={seed_random}"
+        res_turbo = requests.get(url_turbo, headers=HEADERS_DOWNLOAD, timeout=45)
+        if res_turbo.status_code == 200:
+            with open(nome_saida, "wb") as f:
+                f.write(res_turbo.content)
+            print("✅ IMAGEM IA (TURBO) GERADA COM SUCESSO!")
+            return nome_saida
+
         raise Exception(f"Erro na API de IA (Status HTTP {response.status_code})")
 
 def processar_e_ajustar_imagem(caminho_imagem):
@@ -188,7 +202,7 @@ def obter_imagem_cena(frase_pt, index):
 
     # 1. Tenta Gerar com a IA Grátis
     try:
-        gerador_imagem_ia_gratis(prompt_en, nome_foto)
+        gerador_imagem_ia_gratis(prompt_en, nome_foto, index)
         processar_e_ajustar_imagem(nome_foto)
         return nome_foto
     except Exception as e:
