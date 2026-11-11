@@ -64,20 +64,9 @@ def traduzir_ou_extrair_prompt(frase_pt, index):
             pass
 
     if not frase_en:
-        mapa = {
-            'parque': 'magical playground park with giant flowers rainbow',
-            'floresta': 'enchanted forest with tall green trees',
-            'criança': 'cute smiling kids running happy',
-            'garoto': 'young boy running happily',
-            'cachorro': 'cute dog wagging tail running',
-            'rio': 'sparkling clear river stream'
-        }
-        termo = f"magical fantasy scene {index+1}, colorful background"
-        for k, v in mapa.items():
-            if k in frase_pt.lower():
-                termo = f"{v} scene {index+1}"
-                break
-        frase_en = termo
+        # Extração manual limpa por palavras-chave
+        palavras = [p for p in frase_pt.split() if len(p) > 3]
+        frase_en = " ".join(palavras[:6]) if palavras else f"scene {index+1}"
 
     sufixos = {
         "cartoon": "vibrant 2d cartoon illustration style, disney aesthetic, colorful, 8k resolution",
@@ -98,36 +87,38 @@ def gerador_imagem_ia_gratis(prompt, nome_saida, index):
     print(f"🎨 Gerando imagem IA (Pollinations)...")
     print(f"Prompt: '{prompt}'")
     
+    # Pausa de 2 segundos entre chamadas para zerar limite de frequência
+    if index > 0:
+        time.sleep(2)
+
     prompt_encoded = urllib.parse.quote(prompt)
     largura, altura = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
     seed_random = random.randint(1, 999999)
     
-    # Pausa intencional para evitar limite de frequência da API
-    if index > 0:
-        time.sleep(3)
+    # Tentativa 1: Endpoint Padrão
+    url1 = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed={seed_random}"
+    res1 = requests.get(url1, headers=HEADERS_DOWNLOAD, timeout=45)
+    print(f"--> Status Imagem IA (Tentativa 1): {res1.status_code}")
 
-    # Tentativa 1: Endpoint Pollinations Flux Padrão
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed={seed_random}"
-    
-    response = requests.get(url, headers=HEADERS_DOWNLOAD, timeout=45)
-    print(f"--> Status Imagem IA: {response.status_code}")
-
-    if response.status_code == 200:
+    if res1.status_code == 200:
         with open(nome_saida, "wb") as f:
-            f.write(response.content)
+            f.write(res1.content)
         print("✅ IMAGEM IA GERADA COM SUCESSO!")
         return nome_saida
-    else:
-        # Tentativa 2: Endpoint Alternativo Turbo
-        url_turbo = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&model=turbo&seed={seed_random}"
-        res_turbo = requests.get(url_turbo, headers=HEADERS_DOWNLOAD, timeout=45)
-        if res_turbo.status_code == 200:
-            with open(nome_saida, "wb") as f:
-                f.write(res_turbo.content)
-            print("✅ IMAGEM IA (TURBO) GERADA COM SUCESSO!")
-            return nome_saida
 
-        raise Exception(f"Erro na API de IA (Status HTTP {response.status_code})")
+    # Tentativa 2: Endpoint Turbo (Em caso de erro 402 ou limite)
+    time.sleep(2)
+    url2 = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&model=turbo&seed={seed_random}"
+    res2 = requests.get(url2, headers=HEADERS_DOWNLOAD, timeout=45)
+    print(f"--> Status Imagem IA (Tentativa 2 Turbo): {res2.status_code}")
+
+    if res2.status_code == 200:
+        with open(nome_saida, "wb") as f:
+            f.write(res2.content)
+        print("✅ IMAGEM IA (TURBO) GERADA COM SUCESSO!")
+        return nome_saida
+
+    raise Exception(f"Erro na API de IA (HTTP {res1.status_code})")
 
 def processar_e_ajustar_imagem(caminho_imagem):
     img = Image.open(caminho_imagem)
