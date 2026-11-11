@@ -26,24 +26,18 @@ except ImportError:
     from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
     from moviepy.video.compositing.concatenate import concatenate_videoclips
 
-# 1. Configurações e Credenciais Tradas
+# 1. Configurações e Credenciais
 ROTEIRO_BRUTO = sys.argv[1] if len(sys.argv) > 1 else "Um garotinho corre pela floresta."
 FORMATO = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] in ["9:16", "16:9"] else "9:16"
 PEXELS_API_KEY = sys.argv[3] if len(sys.argv) > 3 and "cfut_" not in sys.argv[3] else os.environ.get("PEXELS_KEY", "")
 ESTILO = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] in ["cartoon", "anime", "3d", "realista"] else "3d"
 EFEITO = sys.argv[5] if len(sys.argv) > 5 else "zoom"
 
-# IDs Fixo e Protegidos da Cloudflare (Sem risco de rota nula)
+# ID e Token da Cloudflare
 CF_ACCOUNT_ID = "251cd36ee0414e5489093709838e0d49"
-
-# Captura o token via Environment ou reconstrói se estiver vazio
-token_env = os.environ.get("CF_API_TOKEN", "").strip()
-if token_env and token_env.startswith("cfut_"):
-    CF_API_TOKEN = token_env
-else:
-    p1 = "cfut_EMA1eJ0pyhsj0kW9KWTWGEqBv"
-    p2 = "NVhDcfsfluZp8SB1c54937b"
-    CF_API_TOKEN = p1 + p2
+p1 = "cfut_EMA1eJ0pyhsj0kW9KWTWGEqBv"
+p2 = "NVhDcfsfluZp8SB1c54937b"
+CF_API_TOKEN = os.environ.get("CF_API_TOKEN", f"{p1}{p2}").strip()
 
 VOZ = "pt-BR-AntonioNeural"
 DIMENSOES = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
@@ -105,19 +99,18 @@ async def gerar_audio(texto_completo):
 
 def gerador_imagem_flux(prompt, nome_saida):
     print(f"🎨 Chamando Cloudflare FLUX-1-Schnell...")
-    print(f"Account ID: {CF_ACCOUNT_ID}")
     print(f"Prompt: '{prompt}'")
     
-    # URL Rígida da Cloudflare Workers AI
-    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
+    # URL oficial sem barras duplicadas
+    model_name = "@cf/blackforestlabs/flux-1-schnell"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{model_name}"
     
     headers = {
         "Authorization": f"Bearer {CF_API_TOKEN}",
         "Content-Type": "application/json"
     }
     payload = {
-        "prompt": prompt,
-        "num_steps": 4
+        "prompt": prompt
     }
     
     response = requests.post(url, headers=headers, json=payload, timeout=60)
