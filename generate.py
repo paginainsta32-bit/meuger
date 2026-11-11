@@ -1,6 +1,7 @@
 import sys
 import os
 import re
+import random
 import asyncio
 import requests
 import urllib.parse
@@ -53,7 +54,7 @@ def limpar_roteiro(texto):
             frases_limpas.append(item)
     return frases_limpas if frases_limpas else [texto.strip()]
 
-def traduzir_ou_extrair_prompt(frase_pt):
+def traduzir_ou_extrair_prompt(frase_pt, index):
     frase_en = None
     if HAS_TRANSLATOR:
         try:
@@ -70,10 +71,10 @@ def traduzir_ou_extrair_prompt(frase_pt):
             'cachorro': 'cute dog wagging tail running',
             'rio': 'sparkling clear river stream'
         }
-        termo = "magical fantasy scene, colorful background"
+        termo = f"magical fantasy scene {index+1}, colorful background"
         for k, v in mapa.items():
             if k in frase_pt.lower():
-                termo = v
+                termo = f"{v} scene {index+1}"
                 break
         frase_en = termo
 
@@ -93,14 +94,15 @@ async def gerar_audio(texto_completo):
     await communicate.save("narracao.mp3")
 
 def gerador_imagem_ia_gratis(prompt, nome_saida):
-    print(f"🎨 Gerando imagem IA (Pollinations.ai)...")
+    print(f"🎨 Gerando imagem IA (Pollinations)...")
     print(f"Prompt: '{prompt}'")
     
     prompt_encoded = urllib.parse.quote(prompt)
     largura, altura = (1080, 1920) if FORMATO == "9:16" else (1920, 1080)
+    seed_aleatoria = random.randint(1, 999999)
     
-    # API 100% Grátis e Direta sem Chaves
-    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed=42"
+    # URL sem limitação de taxa (com seed dinâmica por cena e model flux)
+    url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width={largura}&height={altura}&nologo=true&seed={seed_aleatoria}&model=flux"
     
     response = requests.get(url, headers=HEADERS_DOWNLOAD, timeout=45)
     print(f"--> Status Imagem IA: {response.status_code}")
@@ -180,7 +182,7 @@ def criar_imagem_legenda(texto_pt, largura_max, caminho_saida):
 
 def obter_imagem_cena(frase_pt, index):
     nome_foto = f"foto_{index}.jpg"
-    prompt_en = traduzir_ou_extrair_prompt(frase_pt)
+    prompt_en = traduzir_ou_extrair_prompt(frase_pt, index)
 
     print(f"\n--- Processando Cena {index+1} ---")
 
