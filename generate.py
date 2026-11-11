@@ -48,7 +48,6 @@ def limpar_roteiro(texto):
     return frases_limpas if frases_limpas else [texto.strip()]
 
 def construir_prompt_flux(frase):
-    # Tradutor básico de termos em PT para EN para o FLUX.1 entender melhor
     f = frase.lower()
     mapa = {
         'garoto': 'a young boy', 'menino': 'a young boy', 'criança': 'a happy child',
@@ -64,7 +63,6 @@ def construir_prompt_flux(frase):
             sujeito = val
             break
             
-    # Ajusta o sufixo do prompt de acordo com o estilo visual escolhido
     sufixos = {
         "cartoon": "cartoon 2d style, vibrant colors, disney pixel art, highly detailed",
         "anime": "anime style, makoto shinkai aesthetics, studio ghibli, 8k resolution",
@@ -73,8 +71,7 @@ def construir_prompt_flux(frase):
     }
     
     sufixo = sufixos.get(ESTILO, sufixos["realista"])
-    prompt_final = f"{sujeito}, {frase}, {sufixo}"
-    return prompt_final
+    return f"{sujeito}, {frase}, {sufixo}"
 
 async def gerar_audio(texto_completo):
     print("[1/4] Gerando narração...")
@@ -82,18 +79,21 @@ async def gerar_audio(texto_completo):
     await communicate.save("narracao.mp3")
 
 def gerador_imagem_flux(prompt, nome_saida):
-    print(f"🎨 Gerando imagem IA (FLUX-1-Schnell) para: '{prompt[:60]}...'")
+    print(f"🎨 Chamando Cloudflare FLUX-1-Schnell para o prompt: '{prompt[:60]}...'")
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
+    
     headers = {
         "Authorization": f"Bearer {CF_API_TOKEN}",
         "Content-Type": "application/json"
     }
     payload = {
         "prompt": prompt,
-        "num_steps": 4  # O FLUX.1 schnell é super rápido com 4 passos
+        "num_steps": 4
     }
     
-    response = requests.post(url, headers=headers, json=payload, timeout=40)
+    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    print(f"Status API Cloudflare: {response.status_code}")
+
     if response.status_code == 200:
         res_json = response.json()
         if res_json.get("success") and "result" in res_json and "image" in res_json["result"]:
@@ -101,21 +101,29 @@ def gerador_imagem_flux(prompt, nome_saida):
             image_bytes = base64.b64decode(res_json["result"]["image"])
             with open(nome_saida, "wb") as f:
                 f.write(image_bytes)
-            print("✅ Imagem IA gerada com sucesso via Cloudflare!")
+            print("✅ Imagem IA gerada e salva com sucesso!")
             return nome_saida
-    raise Exception(f"Falha na API da Cloudflare: {response.text}")
+        else:
+            print(f"❌ Resposta de erro da Cloudflare: {res_json}")
+    else:
+        print(f"❌ Erro HTTP na Cloudflare ({response.status_code}): {response.text}")
+        
+    raise Exception("Falha na geração de imagem com a Cloudflare Workers AI.")
 
 def aplicar_efeito_filtro(caminho_imagem):
-    img = Image.open(caminho_imagem)
-    if EFEITO == "vivido":
-        enhancer = ImageEnhance.Color(img)
-        img = enhancer.enhance(1.6)
-    elif EFEITO == "vintage":
-        enhancer = ImageEnhance.Color(img)
-        img = enhancer.enhance(0.7)
-        enhancer_b = ImageEnhance.Brightness(img)
-        img = enhancer_b.enhance(0.9)
-    img.save(caminho_imagem)
+    try:
+        img = Image.open(caminho_imagem)
+        if EFEITO == "vivido":
+            enhancer = ImageEnhance.Color(img)
+            img = enhancer.enhance(1.6)
+        elif EFEITO == "vintage":
+            enhancer = ImageEnhance.Color(img)
+            img = enhancer.enhance(0.7)
+            enhancer_b = ImageEnhance.Brightness(img)
+            img = enhancer_b.enhance(0.9)
+        img.save(caminho_imagem)
+    except Exception as e:
+        print(f"Aviso no filtro: {e}")
 
 def criar_imagem_legenda(texto, largura_max, caminho_saida):
     img = Image.new("RGBA", (largura_max, 260), (0, 0, 0, 0))
@@ -153,6 +161,10 @@ def obter_imagem_cena(frase, index):
     nome_foto = f"foto_{index}.jpg"
     prompt = construir_prompt_flux(frase)
 
+    print(f"\n--- Processando Cena {index+1} ---")
+    print(f"CF_ACCOUNT_ID presente: {bool(CF_ACCOUNT_ID)}")
+    print(f"CF_API_TOKEN presente: {bool(CF_API_TOKEN)}")
+
     # 1. Tenta gerar via FLUX.1 (Cloudflare Workers AI)
     if CF_ACCOUNT_ID and CF_API_TOKEN:
         try:
@@ -160,9 +172,10 @@ def obter_imagem_cena(frase, index):
             aplicar_efeito_filtro(nome_foto)
             return nome_foto
         except Exception as e:
-            print(f"⚠️ Erro no FLUX.1: {e}. Usando fallback Pexels/Padrão...")
+            print(f"⚠️ Erro ao gerar com FLUX.1: {e}")
 
-    # 2. Fallback Pexels caso a Cloudflare não esteja configurada
+    # 2. Fallback Pexels se a Cloudflare falhar
+    print("Tentando buscar no Pexels como alternativa...")
     try:
         url = f"https://api.pexels.com/v1/search?query={prompt}&per_page=1"
         headers = {"Authorization": PEXELS_API_KEY} if PEXELS_API_KEY else {}
@@ -173,10 +186,11 @@ def obter_imagem_cena(frase, index):
             with open(nome_foto, "wb") as f: f.write(r.content)
             aplicar_efeito_filtro(nome_foto)
             return nome_foto
-    except:
-        pass
+    except Exception as ex:
+        print(f"Erro no Pexels: {ex}")
 
     # 3. Imagem de reserva final
+    print("Usando imagem estática de reserva final.")
     img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
     r = requests.get(img_fallback, timeout=20)
     with open(nome_foto, "wb") as f: f.write(r.content)
@@ -184,7 +198,7 @@ def obter_imagem_cena(frase, index):
     return nome_foto
 
 def montar_video(frases_limpas):
-    print("[3/4] Montando imagens IA e efeitos...")
+    print("[3/4] Montando vídeo com as imagens e narração...")
     audio = AudioFileClip("narracao.mp3")
     duracao_total = audio.duration
     duracao_por_cena = duracao_total / len(frases_limpas)
