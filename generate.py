@@ -5,6 +5,7 @@ import asyncio
 import requests
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+from deep_translator import GoogleTranslator
 
 # Compatibilidade Pillow / MoviePy
 import PIL.Image
@@ -47,19 +48,24 @@ def limpar_roteiro(texto):
             frases_limpas.append(item)
     return frases_limpas if frases_limpas else [texto.strip()]
 
-def construir_prompt_flux(frase):
-    # Tradução rápida para termos visuais em inglês para o FLUX.1
-    prompt_base = frase
-    
+def construir_prompt_flux(frase_pt):
+    # Traduz automaticamente a frase de português para inglês para a IA entender
+    try:
+        frase_en = GoogleTranslator(source='pt', target='en').translate(frase_pt)
+        print(f"🔤 Tradução: '{frase_pt[:30]}...' -> '{frase_en[:30]}...'")
+    except Exception as e:
+        print(f"Aviso na tradução: {e}")
+        frase_en = frase_pt
+
     sufixos = {
         "cartoon": "vibrant 2d cartoon illustration style, disney pixar aesthetic, colorful, highly detailed",
         "anime": "anime art style, studio ghibli aesthetic, makoto shinkai lighting, 8k resolution",
-        "3d": "3d render animation, pixar character style, unreal engine 5, octane render, cute and detailed",
+        "3d": "3d render animation, pixar character style, disney 3d movie, unreal engine 5, octane render, cute, highly detailed",
         "realista": "cinematic realistic photo, hyperrealistic, 8k, professional photography, dramatic lighting"
     }
     
     sufixo = sufixos.get(ESTILO, sufixos["3d"])
-    return f"{prompt_base}, {sufixo}"
+    return f"{frase_en}, {sufixo}"
 
 async def gerar_audio(texto_completo):
     print("[1/4] Gerando narração...")
@@ -67,7 +73,7 @@ async def gerar_audio(texto_completo):
     await communicate.save("narracao.mp3")
 
 def gerador_imagem_flux(prompt, nome_saida):
-    print(f"🎨 Gerando imagem IA (FLUX-1-Schnell) para: '{prompt[:70]}...'")
+    print(f"🎨 Enviando prompt para a Cloudflare FLUX-1-Schnell: '{prompt[:70]}...'")
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
     
     headers = {
@@ -147,7 +153,7 @@ def obter_imagem_cena(frase, index):
     nome_foto = f"foto_{index}.jpg"
     prompt = construir_prompt_flux(frase)
 
-    # Prioridade TOTAL para o FLUX.1 (Cloudflare)
+    # 1. Tenta a Cloudflare (FLUX.1)
     if CF_ACCOUNT_ID and CF_API_TOKEN:
         try:
             gerador_imagem_flux(prompt, nome_foto)
@@ -156,10 +162,10 @@ def obter_imagem_cena(frase, index):
         except Exception as e:
             print(f"⚠️ Cloudflare falhou na cena {index+1}: {e}")
 
-    # Fallback Pexels apenas se a API da Cloudflare falhar totalmente
+    # 2. Fallback Pexels de segurança
     print("Recorrendo ao Pexels de emergência...")
     try:
-        url = f"https://api.pexels.com/v1/search?query={frase}&per_page=1"
+        url = f"https://api.pexels.com/v1/search?query={prompt}&per_page=1"
         headers = {"Authorization": PEXELS_API_KEY} if PEXELS_API_KEY else {}
         res = requests.get(url, headers=headers, timeout=10)
         if res.status_code == 200 and res.json().get('photos'):
