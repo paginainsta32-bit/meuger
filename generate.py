@@ -5,7 +5,13 @@ import asyncio
 import requests
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
-from deep_translator import GoogleTranslator
+
+# Importação do Tradutor com fallback para não quebrar a execução
+try:
+    from deep_translator import GoogleTranslator
+    HAS_TRANSLATOR = True
+except ImportError:
+    HAS_TRANSLATOR = False
 
 # Compatibilidade Pillow / MoviePy
 import PIL.Image
@@ -49,10 +55,13 @@ def limpar_roteiro(texto):
     return frases_limpas if frases_limpas else [texto.strip()]
 
 def construir_prompt_flux(frase_pt):
-    try:
-        frase_en = GoogleTranslator(source='pt', target='en').translate(frase_pt)
-    except Exception as e:
-        print(f"Aviso na tradução: {e}")
+    if HAS_TRANSLATOR:
+        try:
+            frase_en = GoogleTranslator(source='pt', target='en').translate(frase_pt)
+        except Exception as e:
+            print(f"Aviso na tradução: {e}")
+            frase_en = frase_pt
+    else:
         frase_en = frase_pt
 
     sufixos = {
@@ -71,7 +80,9 @@ async def gerar_audio(texto_completo):
     await communicate.save("narracao.mp3")
 
 def gerador_imagem_flux(prompt, nome_saida):
-    print(f"🎨 Gerando imagem IA (FLUX-1-Schnell)...")
+    print(f"🎨 Enviando chamada para a Cloudflare Workers AI (FLUX-1-Schnell)...")
+    print(f"Prompt: '{prompt}'")
+    
     url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/@cf/blackforestlabs/flux-1-schnell"
     
     headers = {
@@ -84,6 +95,7 @@ def gerador_imagem_flux(prompt, nome_saida):
     }
     
     response = requests.post(url, headers=headers, json=payload, timeout=60)
+    print(f"--> Status retornado pela Cloudflare: {response.status_code}")
 
     if response.status_code == 200:
         res_json = response.json()
@@ -92,12 +104,16 @@ def gerador_imagem_flux(prompt, nome_saida):
             image_bytes = base64.b64decode(res_json["result"]["image"])
             with open(nome_saida, "wb") as f:
                 f.write(image_bytes)
-            print("✅ Imagem IA criada com sucesso pelo FLUX.1!")
+            print("✅ IMAGEM IA GERADA COM SUCESSO PELO FLUX.1!")
             return nome_saida
-    raise Exception("Falha na geração via Cloudflare")
+        else:
+            print(f"❌ Resposta sem campo 'image' da Cloudflare: {res_json}")
+    else:
+        print(f"❌ ERRO DA CLOUDFLARE ({response.status_code}): {response.text}")
+        
+    raise Exception(f"Falha na API da Cloudflare (HTTP {response.status_code})")
 
 def processar_e_ajustar_imagem(caminho_imagem):
-    # Recorta e ajusta a imagem para preencher toda a tela sem bordas pretas
     img = Image.open(caminho_imagem)
     
     if EFEITO == "vivido":
@@ -107,7 +123,6 @@ def processar_e_ajustar_imagem(caminho_imagem):
         enhancer = ImageEnhance.Color(img)
         img = enhancer.enhance(0.7)
 
-    # Redimensionamento inteligente (Crop Cover)
     w_target, h_target = DIMENSOES
     w_orig, h_orig = img.size
     
@@ -132,7 +147,6 @@ def processar_e_ajustar_imagem(caminho_imagem):
     img_cropped.save(caminho_imagem)
 
 def criar_imagem_legenda(texto_pt, largura_max, caminho_saida):
-    # Gera a legenda em PORTUGUÊS
     img = Image.new("RGBA", (largura_max, 260), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
@@ -168,15 +182,33 @@ def obter_imagem_cena(frase_pt, index):
     nome_foto = f"foto_{index}.jpg"
     prompt_en = construir_prompt_flux(frase_pt)
 
+    print(f"\n--- Processando Cena {index+1} ---")
+    print(f"CF_ACCOUNT_ID: '{CF_ACCOUNT_ID}'")
+    print(f"CF_API_TOKEN definido: {bool(CF_API_TOKEN)}")
+
     if CF_ACCOUNT_ID and CF_API_TOKEN:
         try:
             gerador_imagem_flux(prompt_en, nome_foto)
             processar_e_ajustar_imagem(nome_foto)
             return nome_foto
         except Exception as e:
-            print(f"⚠️ Cloudflare falhou na cena {index+1}: {e}")
+            print(f"⚠️ Erro no FLUX.1: {e}")
 
-    # Fallback de emergência
+    # Fallback se a Cloudflare falhar
+    print("Recorrendo ao Pexels de emergência...")
+    try:
+        url = f"https://api.pexels.com/v1/search?query={frase_pt}&per_page=1"
+        headers = {"Authorization": PEXELS_API_KEY} if PEXELS_API_KEY else {}
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200 and res.json().get('photos'):
+            img_url = res.json()['photos'][0]['src']['large2x']
+            r = requests.get(img_url, timeout=20)
+            with open(nome_foto, "wb") as f: f.write(r.content)
+            processar_e_ajustar_imagem(nome_foto)
+            return nome_foto
+    except:
+        pass
+
     img_fallback = "https://images.pexels.com/photos/15286/pexels-photo.jpg"
     r = requests.get(img_fallback, timeout=20)
     with open(nome_foto, "wb") as f: f.write(r.content)
@@ -205,7 +237,6 @@ def montar_video(frases_limpas):
             
         clips_fundo.append(clip_img)
         
-        # Passa a frase em PORTUGUÊS para a legenda
         legenda_path = f"legenda_{i}.png"
         criar_imagem_legenda(frase_pt, DIMENSOES[0] - 80, legenda_path)
         pos_y = DIMENSOES[1] - 450 if FORMATO == "9:16" else DIMENSOES[1] - 250
